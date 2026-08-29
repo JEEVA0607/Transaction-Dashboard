@@ -1,0 +1,528 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<title>Transaction Dashboard</title>
+
+<link rel="stylesheet" href="style.css">
+
+<!-- Excel Reader -->
+<script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
+
+<!-- Charts -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+<!-- HEADER -->
+<header class="header">
+    <div>
+        <h1>Transaction Dashboard</h1>
+        <p>Excel Transaction Analysis</p>
+    </div>
+
+    <label class="upload-btn">
+        📂 Upload Excel
+        <input type="file" id="excelFile" accept=".xlsx,.xls,.csv">
+    </label>
+</header>
+
+
+<!-- FILTER PANEL -->
+<section class="filter-panel">
+
+    <div class="filter-title">
+        <h2>🔎 Filters</h2>
+        <button id="resetFilters">Reset</button>
+    </div>
+
+    <div class="filters">
+
+        <div class="filter">
+            <label>From Date</label>
+            <input type="date" id="fromDate">
+        </div>
+
+        <div class="filter">
+            <label>To Date</label>
+            <input type="date" id="toDate">
+        </div>
+
+        <div class="filter">
+            <label>Status</label>
+            <select id="statusFilter">
+                <option value="">All</option>
+            </select>
+        </div>
+
+        <div class="filter">
+            <label>Transaction Type</label>
+            <select id="typeFilter">
+                <option value="">All</option>
+            </select>
+        </div>
+
+        <div class="filter search">
+            <label>Search</label>
+            <input
+                type="text"
+                id="searchFilter"
+                placeholder="Search user / remark..."
+            >
+        </div>
+
+    </div>
+</section>
+
+
+<!-- KPI CARDS -->
+<section class="kpi-grid">
+
+    <div class="kpi green">
+        <span>Total Credit</span>
+        <strong id="totalCredit">0.00</strong>
+    </div>
+
+    <div class="kpi red">
+        <span>Total Debit</span>
+        <strong id="totalDebit">0.00</strong>
+    </div>
+
+    <div class="kpi purple">
+        <span>Net Movement</span>
+        <strong id="netMovement">0.00</strong>
+    </div>
+
+    <div class="kpi dark">
+        <span>Valid Transactions</span>
+        <strong id="transactionCount">0</strong>
+    </div>
+
+    <div class="kpi orange">
+        <span>Reversal Entries</span>
+        <strong id="reversalCount">0</strong>
+    </div>
+
+    <div class="kpi blue">
+        <span>₹1 Entries</span>
+        <strong id="oneRupeeCount">0</strong>
+    </div>
+
+</section>
+
+
+<!-- ESD / DPB / UPD / DTD / GP -->
+<section class="data-section">
+
+    <div class="section-header">
+        <div>
+            <h2>📊 ESD / DPB / UPD / DTD / GP</h2>
+            <span id="mainCategoryCount">0 entries</span>
+        </div>
+    </div>
+
+    <div class="category-grid">
+
+        <div class="category-card esd">
+            <span>ESD</span>
+            <strong id="esdCount">0</strong>
+            <small id="esdAmount">₹0.00</small>
+        </div>
+
+        <div class="category-card dpb">
+            <span>DPB</span>
+            <strong id="dpbCount">0</strong>
+            <small id="dpbAmount">₹0.00</small>
+        </div>
+
+        <div class="category-card upd">
+            <span>UPD</span>
+            <strong id="updCount">0</strong>
+            <small id="updAmount">₹0.00</small>
+        </div>
+
+        <div class="category-card dtd">
+            <span>DTD</span>
+            <strong id="dtdCount">0</strong>
+            <small id="dtdAmount">₹0.00</small>
+        </div>
+
+        <div class="category-card gp">
+            <span>GP</span>
+            <strong id="gpCount">0</strong>
+            <small id="gpAmount">₹0.00</small>
+        </div>
+
+    </div>
+
+    <div class="table-wrapper">
+
+        <table>
+
+            <thead>
+                <tr>
+                    <th>Date</th>
+                    <th>Type</th>
+                    <th>Amount</th>
+                    <th>Remark</th>
+                    <th>From / To</th>
+                    <th>UTR</th>
+                </tr>
+            </thead>
+
+            <tbody id="categoryTable"></tbody>
+
+        </table>
+
+    </div>
+
+</section>
+
+
+<!-- BONUS SECTION -->
+<section class="data-section bonus-section">
+
+    <div class="section-header">
+
+        <div>
+            <h2>🎁 Bonus Entries</h2>
+            <span id="bonusCount">0 entries</span>
+        </div>
+
+        <div class="bonus-total">
+            <span>Total Bonus</span>
+            <strong id="bonusTotalAmount">₹0.00</strong>
+        </div>
+
+    </div>
+
+
+    <div class="bonus-grid">
+
+        <div class="bonus-card refer">
+            <span>REFER - BONUS</span>
+            <strong id="referBonusCount">0</strong>
+            <small id="referBonusAmount">₹0.00</small>
+        </div>
+
+        <div class="bonus-card welcome">
+            <span>WELCOME BONUS</span>
+            <strong id="welcomeBonusCount">0</strong>
+            <small id="welcomeBonusAmount">₹0.00</small>
+        </div>
+
+        <div class="bonus-card bonus-normal">
+            <span>BONUS:-</span>
+            <strong id="normalBonusCount">0</strong>
+            <small id="normalBonusAmount">₹0.00</small>
+        </div>
+
+        <div class="bonus-card cashback">
+            <span>WEEKLY CASHBACK BONUS</span>
+            <strong id="weeklyCashbackBonusCount">0</strong>
+            <small id="weeklyCashbackBonusAmount">₹0.00</small>
+        </div>
+
+        <div class="bonus-card reverse-bonus">
+            <span>REVB - REVERSE BONUS</span>
+            <strong id="reverseBonusCount">0</strong>
+            <small id="reverseBonusAmount">₹0.00</small>
+        </div>
+
+    </div>
+
+
+    <div class="table-wrapper">
+
+        <table>
+
+            <thead>
+                <tr>
+                    <th>Date</th>
+                    <th>Type</th>
+                    <th>Amount</th>
+                    <th>Remark</th>
+                    <th>From / To</th>
+                    <th>UTR</th>
+                </tr>
+            </thead>
+
+            <tbody id="bonusTable"></tbody>
+
+        </table>
+
+    </div>
+
+</section>
+
+
+<!-- REVERSAL -->
+<section class="data-section reversal-section">
+
+    <div class="section-header">
+
+        <div>
+            <h2>🔄 Reversal Entries</h2>
+            <span id="reversalCountText">0 entries</span>
+        </div>
+
+        <div class="bonus-total">
+            <span>Total Reversal</span>
+            <strong id="reversalTotalAmount">₹0.00</strong>
+        </div>
+
+    </div>
+
+    <div class="table-wrapper">
+
+        <table>
+
+            <thead>
+                <tr>
+                    <th>Date</th>
+                    <th>Type</th>
+                    <th>Amount</th>
+                    <th>Remark</th>
+                    <th>From / To</th>
+                    <th>UTR</th>
+                </tr>
+            </thead>
+
+            <tbody id="reversalTable"></tbody>
+
+        </table>
+
+    </div>
+
+</section>
+
+
+<!-- ₹1 -->
+<section class="data-section one-rupee-section">
+
+    <div class="section-header">
+
+        <div>
+            <h2>💰 ₹1 Entries</h2>
+            <span id="oneRupeeCountText">0 entries</span>
+        </div>
+
+        <div class="bonus-total">
+            <span>Total ₹1</span>
+            <strong id="oneRupeeTotalAmount">₹0.00</strong>
+        </div>
+
+    </div>
+
+    <div class="table-wrapper">
+
+        <table>
+
+            <thead>
+                <tr>
+                    <th>Date</th>
+                    <th>Amount</th>
+                    <th>Remark</th>
+                    <th>From / To</th>
+                    <th>UTR</th>
+                </tr>
+            </thead>
+
+            <tbody id="oneRupeeTable"></tbody>
+
+        </table>
+
+    </div>
+
+</section>
+
+
+<!-- CHARTS -->
+<section class="charts-grid">
+
+    <div class="chart-card">
+        <div class="card-header">
+            <h3>Transaction Status</h3>
+        </div>
+        <canvas id="statusChart"></canvas>
+    </div>
+
+    <div class="chart-card">
+        <div class="card-header">
+            <h3>Transaction Type</h3>
+        </div>
+        <canvas id="typeChart"></canvas>
+    </div>
+
+    <div class="chart-card wide">
+        <div class="card-header">
+            <h3>Credit vs Debit</h3>
+        </div>
+        <canvas id="creditDebitChart"></canvas>
+    </div>
+
+    <div class="chart-card wide">
+        <div class="card-header">
+            <h3>Hourly Transactions</h3>
+        </div>
+        <canvas id="hourChart"></canvas>
+    </div>
+
+</section>
+
+
+<!-- TOP CREDIT -->
+<section class="data-section">
+
+    <div class="section-header">
+        <h2>🟢 Top Credit Transactions</h2>
+    </div>
+
+    <div class="table-wrapper">
+
+        <table>
+
+            <thead>
+                <tr>
+                    <th>Date</th>
+                    <th>Sr No</th>
+                    <th>Credit</th>
+                    <th>Remark</th>
+                    <th>From / To</th>
+                </tr>
+            </thead>
+
+            <tbody id="creditTable"></tbody>
+
+        </table>
+
+    </div>
+
+</section>
+
+
+<!-- TOP DEBIT -->
+<section class="data-section">
+
+    <div class="section-header">
+        <h2>🔴 Top Debit Transactions</h2>
+    </div>
+
+    <div class="table-wrapper">
+
+        <table>
+
+            <thead>
+                <tr>
+                    <th>Date</th>
+                    <th>Sr No</th>
+                    <th>Debit</th>
+                    <th>Remark</th>
+                    <th>From / To</th>
+                </tr>
+            </thead>
+
+            <tbody id="debitTable"></tbody>
+
+        </table>
+
+    </div>
+
+</section>
+
+
+<!-- HOLD / REJECTED -->
+<section class="data-section">
+
+    <div class="section-header">
+        <h2>⚠️ Hold / Rejected</h2>
+    </div>
+
+    <div class="table-wrapper">
+
+        <table>
+
+            <thead>
+                <tr>
+                    <th>Date</th>
+                    <th>Sr No</th>
+                    <th>Amount</th>
+                    <th>Status</th>
+                    <th>Remark</th>
+                    <th>From / To</th>
+                </tr>
+            </thead>
+
+            <tbody id="problemTable"></tbody>
+
+        </table>
+
+    </div>
+
+</section>
+
+
+<!-- USER SUMMARY -->
+<section class="data-section">
+
+    <div class="section-header">
+        <h2>👤 Top Users</h2>
+    </div>
+
+    <div class="table-wrapper">
+
+        <table>
+
+            <thead>
+                <tr>
+                    <th>#</th>
+                    <th>User</th>
+                    <th>Transactions</th>
+                    <th>Credit</th>
+                    <th>Debit</th>
+                    <th>Movement</th>
+                </tr>
+            </thead>
+
+            <tbody id="userTable"></tbody>
+
+        </table>
+
+    </div>
+
+</section>
+
+
+<!-- ALL DATA -->
+<section class="data-section">
+
+    <div class="section-header">
+
+        <div>
+            <h2>📋 Transaction Data</h2>
+            <span id="rowCount">0 rows</span>
+        </div>
+
+        <button id="downloadBtn" class="download-btn">
+            ⬇ Download CSV
+        </button>
+
+    </div>
+
+    <div class="table-wrapper">
+
+        <table>
+
+            <thead id="mainHead"></thead>
+
+            <tbody id="mainTable"></tbody>
+
+        </table>
+
+    </div>
+
+</section>
+
+<script src="script.js"></script>
+</body>
+</html>
