@@ -217,7 +217,7 @@ body {
 }
 
 .kpi strong {
-    font-size: 20px;
+    font-size: 30px;
     word-break: break-word;
 }
 
@@ -326,7 +326,7 @@ body {
 
     margin-top: 3px;
 
-    font-size: 12px;
+    font-size: 30px;
     color: #64748b;
 }
 
@@ -362,18 +362,18 @@ body {
 }
 
 .category-card span {
-    font-size: 13px;
+    font-size: 18px;
     font-weight: 700;
     opacity: 0.9;
 }
 
 .category-card strong {
-    font-size: 28px;
+    font-size: 28px;   
     line-height: 1.1;
 }
 
 .category-card small {
-    font-size: 13px;
+    font-size: 30px;
     opacity: 0.9;
 }
 
@@ -436,7 +436,7 @@ body {
 }
 
 .bonus-card span {
-    font-size: 12px;
+    font-size: 18px;
     font-weight: 700;
     opacity: 0.9;
 }
@@ -447,7 +447,7 @@ body {
 }
 
 .bonus-card small {
-    font-size: 14px;
+    font-size: 30px;
     font-weight: 700;
     opacity: 0.95;
 }
