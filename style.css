@@ -189,26 +189,22 @@ body {
 .kpi-grid {
     display: grid;
     grid-template-columns: repeat(6, 1fr);
-
-    gap: 15px;
+    gap: 2px;
     margin-bottom: 20px;
 }
 
 .kpi {
     min-height: 110px;
-
     padding: 20px;
     border-radius: 13px;
-
     color: #fff;
-
     display: flex;
     flex-direction: column;
     justify-content: space-between;
-
     box-shadow: 0 5px 15px rgba(0, 0, 0, 0.08);
-
     overflow: hidden;
+    margin-left: 20px;
+    margin-right: 20px;
 }
 
 .kpi span {
