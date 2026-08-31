@@ -3,526 +3,951 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Transaction Dashboard</title>
 
-<title>Transaction Dashboard</title>
+    <link rel="stylesheet" href="style.css">
 
-<link rel="stylesheet" href="style.css">
+    <!-- Excel Reader -->
+    <script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
 
-<!-- Excel Reader -->
-<script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
+    <!-- Charts -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
 
-<!-- Charts -->
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<body>
 
-<!-- HEADER -->
-<header class="header">
-    <div>
-        <h1>Transaction Dashboard</h1>
-        <p>Excel Transaction Analysis</p>
-    </div>
+<div class="app">
 
-    <label class="upload-btn">
-        📂 Upload Excel
-        <input type="file" id="excelFile" accept=".xlsx,.xls,.csv">
-    </label>
-</header>
-
-
-<!-- FILTER PANEL -->
-<section class="filter-panel">
-
-    <div class="filter-title">
-        <h2>🔎 Filters</h2>
-        <button id="resetFilters">Reset</button>
-    </div>
-
-    <div class="filters">
-
-        <div class="filter">
-            <label>From Date</label>
-            <input type="date" id="fromDate">
+    <!-- HEADER -->
+    <header class="header">
+        <div>
+            <h1>Transaction Dashboard</h1>
+            <p>Excel Transaction Analysis</p>
         </div>
 
-        <div class="filter">
-            <label>To Date</label>
-            <input type="date" id="toDate">
-        </div>
-
-        <div class="filter">
-            <label>Status</label>
-            <select id="statusFilter">
-                <option value="">All</option>
-            </select>
-        </div>
-
-        <div class="filter">
-            <label>Transaction Type</label>
-            <select id="typeFilter">
-                <option value="">All</option>
-            </select>
-        </div>
-
-        <div class="filter search">
-            <label>Search</label>
+        <label class="upload-btn">
+            📂 Upload Excel
             <input
-                type="text"
-                id="searchFilter"
-                placeholder="Search user / remark..."
+                type="file"
+                id="excelFile"
+                accept=".xlsx,.xls,.csv"
             >
+        </label>
+    </header>
+
+
+    <!-- FILTER PANEL -->
+    <section class="filter-panel">
+
+        <div class="filter-title">
+            <h2>🔎 Filters</h2>
+            <button id="resetFilters" type="button">Reset</button>
         </div>
 
-    </div>
-</section>
+        <div class="filters">
 
+            <div class="filter">
+                <label for="fromDate">From Date</label>
+                <input type="date" id="fromDate">
+            </div>
 
-<!-- KPI CARDS -->
-<section class="kpi-grid">
+            <div class="filter">
+                <label for="toDate">To Date</label>
+                <input type="date" id="toDate">
+            </div>
 
-    <div class="kpi green">
-        <span>Total Credit</span>
-        <strong id="totalCredit">0.00</strong>
-    </div>
+            <div class="filter">
+                <label for="statusFilter">Status</label>
+                <select id="statusFilter">
+                    <option value="">All</option>
+                </select>
+            </div>
 
-    <div class="kpi red">
-        <span>Total Debit</span>
-        <strong id="totalDebit">0.00</strong>
-    </div>
+            <div class="filter">
+                <label for="typeFilter">Transaction Type</label>
+                <select id="typeFilter">
+                    <option value="">All</option>
+                </select>
+            </div>
 
-    <div class="kpi purple">
-        <span>Net Movement</span>
-        <strong id="netMovement">0.00</strong>
-    </div>
+            <div class="filter search">
+                <label for="searchFilter">Search</label>
+                <input
+                    type="text"
+                    id="searchFilter"
+                    placeholder="Search user / remark..."
+                >
+            </div>
 
-    <div class="kpi dark">
-        <span>Valid Transactions</span>
-        <strong id="transactionCount">0</strong>
-    </div>
-
-    <div class="kpi orange">
-        <span>Reversal Entries</span>
-        <strong id="reversalCount">0</strong>
-    </div>
-
-    <div class="kpi blue">
-        <span>₹1 Entries</span>
-        <strong id="oneRupeeCount">0</strong>
-    </div>
-
-</section>
-
-
-<!-- ESD / DPB / UPD / DTD / GP -->
-<section class="data-section">
-
-    <div class="section-header">
-        <div>
-            <h2>📊 ESD / DPB / UPD / DTD / GP</h2>
-            <span id="mainCategoryCount">0 entries</span>
         </div>
-    </div>
+    </section>
 
-    <div class="category-grid">
 
-        <div class="category-card esd">
-            <span>ESD</span>
-            <strong id="esdCount">0</strong>
-            <small id="esdAmount">₹0.00</small>
+    <!-- KPI CARDS -->
+    <section class="kpi-grid">
+
+        <div class="kpi green">
+            <span>Total Credit</span>
+            <strong id="totalCredit">0.00</strong>
+            <button
+                type="button"
+                class="copy-btn"
+                data-copy-id="totalCredit"
+                onclick="copySummaryValue('totalCredit', 'amount')"
+                title="Copy amount"
+            >⧉</button>
         </div>
 
-        <div class="category-card dpb">
-            <span>DPB</span>
-            <strong id="dpbCount">0</strong>
-            <small id="dpbAmount">₹0.00</small>
+
+        <div class="kpi red">
+            <span>Total Debit</span>
+            <strong id="totalDebit">0.00</strong>
+            <button
+                type="button"
+                class="copy-btn"
+                data-copy-id="totalDebit"
+                onclick="copySummaryValue('totalDebit', 'amount')"
+                title="Copy amount"
+            >⧉</button>
         </div>
 
-        <div class="category-card upd">
-            <span>UPD</span>
-            <strong id="updCount">0</strong>
-            <small id="updAmount">₹0.00</small>
+
+        <div class="kpi purple">
+            <span>Net Movement</span>
+            <strong id="netMovement">0.00</strong>
+            <button
+                type="button"
+                class="copy-btn"
+                data-copy-id="netMovement"
+                onclick="copySummaryValue('netMovement', 'amount')"
+                title="Copy amount"
+            >⧉</button>
         </div>
 
-        <div class="category-card dtd">
-            <span>DTD</span>
-            <strong id="dtdCount">0</strong>
-            <small id="dtdAmount">₹0.00</small>
+
+        <div class="kpi dark">
+            <span>Valid Transactions</span>
+            <strong id="transactionCount">0</strong>
+            <button
+                type="button"
+                class="copy-btn"
+                data-copy-id="transactionCount"
+                onclick="copySummaryValue('transactionCount', 'count')"
+                title="Copy count"
+            >⧉</button>
         </div>
 
-        <div class="category-card gp">
-            <span>GP</span>
-            <strong id="gpCount">0</strong>
-            <small id="gpAmount">₹0.00</small>
+
+        <div class="kpi orange">
+            <span>Reversal Entries</span>
+            <strong id="reversalCount">0</strong>
+            <button
+                type="button"
+                class="copy-btn"
+                data-copy-id="reversalCount"
+                onclick="copySummaryValue('reversalCount', 'count')"
+                title="Copy count"
+            >⧉</button>
         </div>
 
-    </div>
 
-    <div class="table-wrapper">
-
-        <table>
-
-            <thead>
-                <tr>
-                    <th>Date</th>
-                    <th>Type</th>
-                    <th>Amount</th>
-                    <th>Remark</th>
-                    <th>From / To</th>
-                    <th>UTR</th>
-                </tr>
-            </thead>
-
-            <tbody id="categoryTable"></tbody>
-
-        </table>
-
-    </div>
-
-</section>
-
-
-<!-- BONUS SECTION -->
-<section class="data-section bonus-section">
-
-    <div class="section-header">
-
-        <div>
-            <h2>🎁 Bonus Entries</h2>
-            <span id="bonusCount">0 entries</span>
+        <div class="kpi blue">
+            <span>₹1 Entries</span>
+            <strong id="oneRupeeCount">0</strong>
+            <button
+                type="button"
+                class="copy-btn"
+                data-copy-id="oneRupeeCount"
+                onclick="copySummaryValue('oneRupeeCount', 'count')"
+                title="Copy count"
+            >⧉</button>
         </div>
 
-        <div class="bonus-total">
-            <span>Total Bonus</span>
-            <strong id="bonusTotalAmount">₹0.00</strong>
+    </section>
+
+
+    <!-- ESD / DPB / UPD / DTD / GP -->
+    <section class="data-section">
+
+        <div class="section-header">
+            <div>
+                <h2>📊 ESD / DPB / UPD / DTD / GP</h2>
+                <span id="mainCategoryCount">0 entries</span>
+            </div>
         </div>
 
-    </div>
+        <div class="category-grid">
+
+            <div class="category-card esd">
+                <span>ESD</span>
+
+                <div class="summary-value">
+                    <strong id="esdCount">0</strong>
+                    <button
+                        type="button"
+                        class="copy-btn"
+                        data-copy-id="esdCount"
+                        onclick="copySummaryValue('esdCount', 'count')"
+                        title="Copy count"
+                    >⧉</button>
+                </div>
+
+                <div class="summary-value">
+                    <small id="esdAmount">₹0.00</small>
+                    <button
+                        type="button"
+                        class="copy-btn"
+                        data-copy-id="esdAmount"
+                        onclick="copySummaryValue('esdAmount', 'amount')"
+                        title="Copy amount"
+                    >⧉</button>
+                </div>
+            </div>
 
 
-    <div class="bonus-grid">
+            <div class="category-card dpb">
+                <span>DPB</span>
 
-        <div class="bonus-card refer">
-            <span>REFER - BONUS</span>
-            <strong id="referBonusCount">0</strong>
-            <small id="referBonusAmount">₹0.00</small>
+                <div class="summary-value">
+                    <strong id="dpbCount">0</strong>
+                    <button
+                        type="button"
+                        class="copy-btn"
+                        data-copy-id="dpbCount"
+                        onclick="copySummaryValue('dpbCount', 'count')"
+                        title="Copy count"
+                    >⧉</button>
+                </div>
+
+                <div class="summary-value">
+                    <small id="dpbAmount">₹0.00</small>
+                    <button
+                        type="button"
+                        class="copy-btn"
+                        data-copy-id="dpbAmount"
+                        onclick="copySummaryValue('dpbAmount', 'amount')"
+                        title="Copy amount"
+                    >⧉</button>
+                </div>
+            </div>
+
+
+            <div class="category-card upd">
+                <span>UPD</span>
+
+                <div class="summary-value">
+                    <strong id="updCount">0</strong>
+                    <button
+                        type="button"
+                        class="copy-btn"
+                        data-copy-id="updCount"
+                        onclick="copySummaryValue('updCount', 'count')"
+                        title="Copy count"
+                    >⧉</button>
+                </div>
+
+                <div class="summary-value">
+                    <small id="updAmount">₹0.00</small>
+                    <button
+                        type="button"
+                        class="copy-btn"
+                        data-copy-id="updAmount"
+                        onclick="copySummaryValue('updAmount', 'amount')"
+                        title="Copy amount"
+                    >⧉</button>
+                </div>
+            </div>
+
+
+            <div class="category-card dtd">
+                <span>DTD</span>
+
+                <div class="summary-value">
+                    <strong id="dtdCount">0</strong>
+                    <button
+                        type="button"
+                        class="copy-btn"
+                        data-copy-id="dtdCount"
+                        onclick="copySummaryValue('dtdCount', 'count')"
+                        title="Copy count"
+                    >⧉</button>
+                </div>
+
+                <div class="summary-value">
+                    <small id="dtdAmount">₹0.00</small>
+                    <button
+                        type="button"
+                        class="copy-btn"
+                        data-copy-id="dtdAmount"
+                        onclick="copySummaryValue('dtdAmount', 'amount')"
+                        title="Copy amount"
+                    >⧉</button>
+                </div>
+            </div>
+
+
+            <div class="category-card gp">
+                <span>GP</span>
+
+                <div class="summary-value">
+                    <strong id="gpCount">0</strong>
+                    <button
+                        type="button"
+                        class="copy-btn"
+                        data-copy-id="gpCount"
+                        onclick="copySummaryValue('gpCount', 'count')"
+                        title="Copy count"
+                    >⧉</button>
+                </div>
+
+                <div class="summary-value">
+                    <small id="gpAmount">₹0.00</small>
+                    <button
+                        type="button"
+                        class="copy-btn"
+                        data-copy-id="gpAmount"
+                        onclick="copySummaryValue('gpAmount', 'amount')"
+                        title="Copy amount"
+                    >⧉</button>
+                </div>
+            </div>
+
         </div>
 
-        <div class="bonus-card welcome">
-            <span>WELCOME BONUS</span>
-            <strong id="welcomeBonusCount">0</strong>
-            <small id="welcomeBonusAmount">₹0.00</small>
+
+        <div class="table-wrapper">
+
+            <table>
+
+                <thead>
+                    <tr>
+                        <th>Date</th>
+                        <th>Type</th>
+                        <th>Amount</th>
+                        <th>Remark</th>
+                        <th>From / To</th>
+                        <th>UTR</th>
+                    </tr>
+                </thead>
+
+                <tbody id="categoryTable"></tbody>
+
+            </table>
+
         </div>
 
-        <div class="bonus-card bonus-normal">
-            <span>BONUS:-</span>
-            <strong id="normalBonusCount">0</strong>
-            <small id="normalBonusAmount">₹0.00</small>
+    </section>
+
+
+    <!-- WITHDRAWAL SECTION -->
+    <section class="data-section withdrawal-section">
+
+        <div class="section-header">
+
+            <div>
+                <h2>💸 Withdrawal</h2>
+
+                <span id="withdrawalCount">0 entries</span>
+
+                <button
+                    type="button"
+                    class="copy-btn"
+                    data-copy-id="withdrawalCount"
+                    onclick="copySummaryValue('withdrawalCount', 'count')"
+                    title="Copy count"
+                >⧉</button>
+            </div>
+
         </div>
 
-        <div class="bonus-card cashback">
-            <span>WEEKLY CASHBACK BONUS</span>
-            <strong id="weeklyCashbackBonusCount">0</strong>
-            <small id="weeklyCashbackBonusAmount">₹0.00</small>
+
+        <div class="withdrawal-grid">
+
+            <div class="withdrawal-card hold">
+
+                <span>HOLD</span>
+
+                <div class="summary-value">
+                    <strong id="holdCount">0</strong>
+                    <button
+                        type="button"
+                        class="copy-btn"
+                        data-copy-id="holdCount"
+                        onclick="copySummaryValue('holdCount', 'count')"
+                        title="Copy count"
+                    >⧉</button>
+                </div>
+
+                <div class="summary-value">
+                    <small id="holdAmount">₹0.00</small>
+                    <button
+                        type="button"
+                        class="copy-btn"
+                        data-copy-id="holdAmount"
+                        onclick="copySummaryValue('holdAmount', 'amount')"
+                        title="Copy amount"
+                    >⧉</button>
+                </div>
+
+            </div>
+
+
+            <div class="withdrawal-card successful">
+
+                <span>SUCCESSFUL</span>
+
+                <div class="summary-value">
+                    <strong id="successfulCount">0</strong>
+                    <button
+                        type="button"
+                        class="copy-btn"
+                        data-copy-id="successfulCount"
+                        onclick="copySummaryValue('successfulCount', 'count')"
+                        title="Copy count"
+                    >⧉</button>
+                </div>
+
+                <div class="summary-value">
+                    <small id="successfulAmount">₹0.00</small>
+                    <button
+                        type="button"
+                        class="copy-btn"
+                        data-copy-id="successfulAmount"
+                        onclick="copySummaryValue('successfulAmount', 'amount')"
+                        title="Copy amount"
+                    >⧉</button>
+                </div>
+
+            </div>
+
         </div>
 
-        <div class="bonus-card reverse-bonus">
-            <span>REVB - REVERSE BONUS</span>
-            <strong id="reverseBonusCount">0</strong>
-            <small id="reverseBonusAmount">₹0.00</small>
+    </section>
+
+
+    <!-- BONUS SECTION -->
+    <section class="data-section bonus-section">
+
+        <div class="section-header">
+
+            <div>
+                <h2>🎁 Bonus Entries</h2>
+
+                <span id="bonusCount">0 entries</span>
+
+                <button
+                    type="button"
+                    class="copy-btn"
+                    data-copy-id="bonusCount"
+                    onclick="copySummaryValue('bonusCount', 'count')"
+                    title="Copy count"
+                >⧉</button>
+            </div>
+
+
+            <div class="bonus-total">
+
+                <span>Total Bonus</span>
+
+                <strong id="bonusTotalAmount">₹0.00</strong>
+
+                <button
+                    type="button"
+                    class="copy-btn"
+                    data-copy-id="bonusTotalAmount"
+                    onclick="copySummaryValue('bonusTotalAmount', 'amount')"
+                    title="Copy amount"
+                >⧉</button>
+
+            </div>
+
         </div>
 
-    </div>
+
+        <div class="bonus-grid">
+
+            <div class="bonus-card refer">
+
+                <span>REFER - BONUS</span>
+
+                <div class="summary-value">
+                    <strong id="referBonusCount">0</strong>
+                    <button
+                        type="button"
+                        class="copy-btn"
+                        data-copy-id="referBonusCount"
+                        onclick="copySummaryValue('referBonusCount', 'count')"
+                        title="Copy count"
+                    >⧉</button>
+                </div>
+
+                <div class="summary-value">
+                    <small id="referBonusAmount">₹0.00</small>
+                    <button
+                        type="button"
+                        class="copy-btn"
+                        data-copy-id="referBonusAmount"
+                        onclick="copySummaryValue('referBonusAmount', 'amount')"
+                        title="Copy amount"
+                    >⧉</button>
+                </div>
+
+            </div>
 
 
-    <div class="table-wrapper">
+            <div class="bonus-card welcome">
 
-        <table>
+                <span>WELCOME BONUS</span>
 
-            <thead>
-                <tr>
-                    <th>Date</th>
-                    <th>Type</th>
-                    <th>Amount</th>
-                    <th>Remark</th>
-                    <th>From / To</th>
-                    <th>UTR</th>
-                </tr>
-            </thead>
+                <div class="summary-value">
+                    <strong id="welcomeBonusCount">0</strong>
+                    <button
+                        type="button"
+                        class="copy-btn"
+                        data-copy-id="welcomeBonusCount"
+                        onclick="copySummaryValue('welcomeBonusCount', 'count')"
+                        title="Copy count"
+                    >⧉</button>
+                </div>
 
-            <tbody id="bonusTable"></tbody>
+                <div class="summary-value">
+                    <small id="welcomeBonusAmount">₹0.00</small>
+                    <button
+                        type="button"
+                        class="copy-btn"
+                        data-copy-id="welcomeBonusAmount"
+                        onclick="copySummaryValue('welcomeBonusAmount', 'amount')"
+                        title="Copy amount"
+                    >⧉</button>
+                </div>
 
-        </table>
-
-    </div>
-
-</section>
+            </div>
 
 
-<!-- REVERSAL -->
-<section class="data-section reversal-section">
+            <div class="bonus-card bonus-normal">
 
-    <div class="section-header">
+                <span>BONUS:-</span>
 
-        <div>
-            <h2>🔄 Reversal Entries</h2>
-            <span id="reversalCountText">0 entries</span>
+                <div class="summary-value">
+                    <strong id="normalBonusCount">0</strong>
+                    <button
+                        type="button"
+                        class="copy-btn"
+                        data-copy-id="normalBonusCount"
+                        onclick="copySummaryValue('normalBonusCount', 'count')"
+                        title="Copy count"
+                    >⧉</button>
+                </div>
+
+                <div class="summary-value">
+                    <small id="normalBonusAmount">₹0.00</small>
+                    <button
+                        type="button"
+                        class="copy-btn"
+                        data-copy-id="normalBonusAmount"
+                        onclick="copySummaryValue('normalBonusAmount', 'amount')"
+                        title="Copy amount"
+                    >⧉</button>
+                </div>
+
+            </div>
+
+
+            <div class="bonus-card cashback">
+
+                <span>WEEKLY CASHBACK BONUS</span>
+
+                <div class="summary-value">
+                    <strong id="weeklyCashbackBonusCount">0</strong>
+                    <button
+                        type="button"
+                        class="copy-btn"
+                        data-copy-id="weeklyCashbackBonusCount"
+                        onclick="copySummaryValue('weeklyCashbackBonusCount', 'count')"
+                        title="Copy count"
+                    >⧉</button>
+                </div>
+
+                <div class="summary-value">
+                    <small id="weeklyCashbackBonusAmount">₹0.00</small>
+                    <button
+                        type="button"
+                        class="copy-btn"
+                        data-copy-id="weeklyCashbackBonusAmount"
+                        onclick="copySummaryValue('weeklyCashbackBonusAmount', 'amount')"
+                        title="Copy amount"
+                    >⧉</button>
+                </div>
+
+            </div>
+
         </div>
 
-        <div class="bonus-total">
-            <span>Total Reversal</span>
-            <strong id="reversalTotalAmount">₹0.00</strong>
+
+        <div class="table-wrapper">
+
+            <table>
+
+                <thead>
+                    <tr>
+                        <th>Date</th>
+                        <th>Type</th>
+                        <th>Amount</th>
+                        <th>Remark</th>
+                        <th>From / To</th>
+                        <th>UTR</th>
+                    </tr>
+                </thead>
+
+                <tbody id="bonusTable"></tbody>
+
+            </table>
+
         </div>
 
-    </div>
-
-    <div class="table-wrapper">
-
-        <table>
-
-            <thead>
-                <tr>
-                    <th>Date</th>
-                    <th>Type</th>
-                    <th>Amount</th>
-                    <th>Remark</th>
-                    <th>From / To</th>
-                    <th>UTR</th>
-                </tr>
-            </thead>
-
-            <tbody id="reversalTable"></tbody>
-
-        </table>
-
-    </div>
-
-</section>
+    </section>
 
 
-<!-- ₹1 -->
-<section class="data-section one-rupee-section">
+    <!-- REVERSAL -->
+    <section class="data-section reversal-section">
 
-    <div class="section-header">
+        <div class="section-header">
 
-        <div>
-            <h2>💰 ₹1 Entries</h2>
-            <span id="oneRupeeCountText">0 entries</span>
+            <div>
+                <h2>🔄 Reversal Entries</h2>
+
+                <span id="reversalCountText">0 entries</span>
+
+                <button
+                    type="button"
+                    class="copy-btn"
+                    data-copy-id="reversalCountText"
+                    onclick="copySummaryValue('reversalCountText', 'count')"
+                    title="Copy count"
+                >⧉</button>
+            </div>
+
+
+            <div class="bonus-total">
+
+                <span>Total Reversal</span>
+
+                <strong id="reversalTotalAmount">₹0.00</strong>
+
+                <button
+                    type="button"
+                    class="copy-btn"
+                    data-copy-id="reversalTotalAmount"
+                    onclick="copySummaryValue('reversalTotalAmount', 'amount')"
+                    title="Copy amount"
+                >⧉</button>
+
+            </div>
+
         </div>
 
-        <div class="bonus-total">
-            <span>Total ₹1</span>
-            <strong id="oneRupeeTotalAmount">₹0.00</strong>
+
+        <div class="table-wrapper">
+
+            <table>
+
+                <thead>
+                    <tr>
+                        <th>Date</th>
+                        <th>Type</th>
+                        <th>Amount</th>
+                        <th>Remark</th>
+                        <th>From / To</th>
+                        <th>UTR</th>
+                    </tr>
+                </thead>
+
+                <tbody id="reversalTable"></tbody>
+
+            </table>
+
         </div>
 
-    </div>
-
-    <div class="table-wrapper">
-
-        <table>
-
-            <thead>
-                <tr>
-                    <th>Date</th>
-                    <th>Amount</th>
-                    <th>Remark</th>
-                    <th>From / To</th>
-                    <th>UTR</th>
-                </tr>
-            </thead>
-
-            <tbody id="oneRupeeTable"></tbody>
-
-        </table>
-
-    </div>
-
-</section>
+    </section>
 
 
-<!-- CHARTS -->
-<section class="charts-grid">
+    <!-- ₹1 -->
+    <section class="data-section one-rupee-section">
 
-    <div class="chart-card">
-        <div class="card-header">
-            <h3>Transaction Status</h3>
-        </div>
-        <canvas id="statusChart"></canvas>
-    </div>
+        <div class="section-header">
 
-    <div class="chart-card">
-        <div class="card-header">
-            <h3>Transaction Type</h3>
-        </div>
-        <canvas id="typeChart"></canvas>
-    </div>
+            <div>
+                <h2>💰 ₹1 Entries</h2>
 
-    <div class="chart-card wide">
-        <div class="card-header">
-            <h3>Credit vs Debit</h3>
-        </div>
-        <canvas id="creditDebitChart"></canvas>
-    </div>
+                <span id="oneRupeeCountText">0 entries</span>
 
-    <div class="chart-card wide">
-        <div class="card-header">
-            <h3>Hourly Transactions</h3>
-        </div>
-        <canvas id="hourChart"></canvas>
-    </div>
-
-</section>
+                <button
+                    type="button"
+                    class="copy-btn"
+                    data-copy-id="oneRupeeCountText"
+                    onclick="copySummaryValue('oneRupeeCountText', 'count')"
+                    title="Copy count"
+                >⧉</button>
+            </div>
 
 
-<!-- TOP CREDIT -->
-<section class="data-section">
+            <div class="bonus-total">
 
-    <div class="section-header">
-        <h2>🟢 Top Credit Transactions</h2>
-    </div>
+                <span>Total ₹1</span>
 
-    <div class="table-wrapper">
+                <strong id="oneRupeeTotalAmount">₹0.00</strong>
 
-        <table>
+                <button
+                    type="button"
+                    class="copy-btn"
+                    data-copy-id="oneRupeeTotalAmount"
+                    onclick="copySummaryValue('oneRupeeTotalAmount', 'amount')"
+                    title="Copy amount"
+                >⧉</button>
 
-            <thead>
-                <tr>
-                    <th>Date</th>
-                    <th>Sr No</th>
-                    <th>Credit</th>
-                    <th>Remark</th>
-                    <th>From / To</th>
-                </tr>
-            </thead>
+            </div>
 
-            <tbody id="creditTable"></tbody>
-
-        </table>
-
-    </div>
-
-</section>
-
-
-<!-- TOP DEBIT -->
-<section class="data-section">
-
-    <div class="section-header">
-        <h2>🔴 Top Debit Transactions</h2>
-    </div>
-
-    <div class="table-wrapper">
-
-        <table>
-
-            <thead>
-                <tr>
-                    <th>Date</th>
-                    <th>Sr No</th>
-                    <th>Debit</th>
-                    <th>Remark</th>
-                    <th>From / To</th>
-                </tr>
-            </thead>
-
-            <tbody id="debitTable"></tbody>
-
-        </table>
-
-    </div>
-
-</section>
-
-
-<!-- HOLD / REJECTED -->
-<section class="data-section">
-
-    <div class="section-header">
-        <h2>⚠️ Hold / Rejected</h2>
-    </div>
-
-    <div class="table-wrapper">
-
-        <table>
-
-            <thead>
-                <tr>
-                    <th>Date</th>
-                    <th>Sr No</th>
-                    <th>Amount</th>
-                    <th>Status</th>
-                    <th>Remark</th>
-                    <th>From / To</th>
-                </tr>
-            </thead>
-
-            <tbody id="problemTable"></tbody>
-
-        </table>
-
-    </div>
-
-</section>
-
-
-<!-- USER SUMMARY -->
-<section class="data-section">
-
-    <div class="section-header">
-        <h2>👤 Top Users</h2>
-    </div>
-
-    <div class="table-wrapper">
-
-        <table>
-
-            <thead>
-                <tr>
-                    <th>#</th>
-                    <th>User</th>
-                    <th>Transactions</th>
-                    <th>Credit</th>
-                    <th>Debit</th>
-                    <th>Movement</th>
-                </tr>
-            </thead>
-
-            <tbody id="userTable"></tbody>
-
-        </table>
-
-    </div>
-
-</section>
-
-
-<!-- ALL DATA -->
-<section class="data-section">
-
-    <div class="section-header">
-
-        <div>
-            <h2>📋 Transaction Data</h2>
-            <span id="rowCount">0 rows</span>
         </div>
 
-        <button id="downloadBtn" class="download-btn">
-            ⬇ Download CSV
-        </button>
 
-    </div>
+        <div class="table-wrapper">
 
-    <div class="table-wrapper">
+            <table>
 
-        <table>
+                <thead>
+                    <tr>
+                        <th>Date</th>
+                        <th>Amount</th>
+                        <th>Remark</th>
+                        <th>From / To</th>
+                        <th>UTR</th>
+                    </tr>
+                </thead>
 
-            <thead id="mainHead"></thead>
+                <tbody id="oneRupeeTable"></tbody>
 
-            <tbody id="mainTable"></tbody>
+            </table>
 
-        </table>
+        </div>
 
-    </div>
+    </section>
 
-</section>
+
+    <!-- CHARTS -->
+    <section class="charts-grid">
+
+        <div class="chart-card">
+
+            <div class="card-header">
+                <h3>Transaction Status</h3>
+            </div>
+
+            <canvas id="statusChart"></canvas>
+
+        </div>
+
+
+        <div class="chart-card">
+
+            <div class="card-header">
+                <h3>Transaction Type</h3>
+            </div>
+
+            <canvas id="typeChart"></canvas>
+
+        </div>
+
+
+        <div class="chart-card wide">
+
+            <div class="card-header">
+                <h3>Credit vs Debit</h3>
+            </div>
+
+            <canvas id="creditDebitChart"></canvas>
+
+        </div>
+
+
+        <div class="chart-card wide">
+
+            <div class="card-header">
+                <h3>Hourly Transactions</h3>
+            </div>
+
+            <canvas id="hourChart"></canvas>
+
+        </div>
+
+    </section>
+
+
+    <!-- TOP CREDIT -->
+    <section class="data-section">
+
+        <div class="section-header">
+            <h2>🟢 Top Credit Transactions</h2>
+        </div>
+
+
+        <div class="table-wrapper">
+
+            <table>
+
+                <thead>
+                    <tr>
+                        <th>Date</th>
+                        <th>Sr No</th>
+                        <th>Credit</th>
+                        <th>Remark</th>
+                        <th>From / To</th>
+                    </tr>
+                </thead>
+
+                <tbody id="creditTable"></tbody>
+
+            </table>
+
+        </div>
+
+    </section>
+
+
+    <!-- TOP DEBIT -->
+    <section class="data-section">
+
+        <div class="section-header">
+            <h2>🔴 Top Debit Transactions</h2>
+        </div>
+
+
+        <div class="table-wrapper">
+
+            <table>
+
+                <thead>
+                    <tr>
+                        <th>Date</th>
+                        <th>Sr No</th>
+                        <th>Debit</th>
+                        <th>Remark</th>
+                        <th>From / To</th>
+                    </tr>
+                </thead>
+
+                <tbody id="debitTable"></tbody>
+
+            </table>
+
+        </div>
+
+    </section>
+
+
+    <!-- HOLD / REJECTED -->
+    <section class="data-section">
+
+        <div class="section-header">
+            <h2>⚠️ Hold / Rejected</h2>
+        </div>
+
+
+        <div class="table-wrapper">
+
+            <table>
+
+                <thead>
+                    <tr>
+                        <th>Date</th>
+                        <th>Sr No</th>
+                        <th>Amount</th>
+                        <th>Status</th>
+                        <th>Remark</th>
+                        <th>From / To</th>
+                    </tr>
+                </thead>
+
+                <tbody id="problemTable"></tbody>
+
+            </table>
+
+        </div>
+
+    </section>
+
+
+    <!-- USER SUMMARY -->
+    <section class="data-section">
+
+        <div class="section-header">
+            <h2>👤 Top Users</h2>
+        </div>
+
+
+        <div class="table-wrapper">
+
+            <table>
+
+                <thead>
+                    <tr>
+                        <th>#</th>
+                        <th>User</th>
+                        <th>Transactions</th>
+                        <th>Credit</th>
+                        <th>Debit</th>
+                        <th>Movement</th>
+                    </tr>
+                </thead>
+
+                <tbody id="userTable"></tbody>
+
+            </table>
+
+        </div>
+
+    </section>
+
+
+    <!-- ALL DATA -->
+    <section class="data-section">
+
+        <div class="section-header">
+
+            <div>
+                <h2>📋 Transaction Data</h2>
+                <span id="rowCount">0 rows</span>
+            </div>
+
+
+            <button
+                id="downloadBtn"
+                class="download-btn"
+                type="button"
+            >
+                ⬇ Download CSV
+            </button>
+
+        </div>
+
+
+        <div class="table-wrapper">
+
+            <table>
+
+                <thead id="mainHead"></thead>
+
+                <tbody id="mainTable"></tbody>
+
+            </table>
+
+        </div>
+
+    </section>
+
+</div>
+
 
 <script src="script.js"></script>
+
 </body>
 </html>
