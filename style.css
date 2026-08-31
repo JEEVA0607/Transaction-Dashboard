@@ -189,7 +189,7 @@ body {
 .kpi-grid {
     display: grid;
     grid-template-columns: repeat(6, 1fr);
-    gap: 2px;
+    gap: 15px;
     margin-bottom: 20px;
 }
 
@@ -203,8 +203,6 @@ body {
     justify-content: space-between;
     box-shadow: 0 5px 15px rgba(0, 0, 0, 0.08);
     overflow: hidden;
-    margin-left: 20px;
-    margin-right: 20px;
 }
 
 .kpi span {
@@ -322,7 +320,7 @@ body {
 
     margin-top: 3px;
 
-    font-size: 30px;
+    font-size: 12px;
     color: #64748b;
 }
 
@@ -856,4 +854,84 @@ tbody tr:hover {
     .chart-card canvas {
         height: 230px !important;
     }
+}
+/* =========================================
+   WITHDRAWAL SECTION
+========================================= */
+
+.withdrawal-section {
+    border-top: 4px solid #0f766e;
+}
+
+.withdrawal-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 15px;
+}
+
+.withdrawal-card {
+    min-height: 125px;
+    padding: 18px;
+    border-radius: 14px;
+    color: #fff;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    box-shadow: 0 5px 15px rgba(0, 0, 0, 0.08);
+    overflow: hidden;
+}
+
+.withdrawal-card span {
+    font-size: 18px;
+    font-weight: 700;
+    opacity: 0.9;
+}
+
+.withdrawal-card strong {
+    font-size: 28px;
+    line-height: 1.1;
+}
+
+.withdrawal-card small {
+    font-size: 30px;
+    font-weight: 700;
+    opacity: 0.95;
+}
+
+.withdrawal-card.hold {
+    background: linear-gradient(135deg, #f59e0b, #b45309);
+}
+
+.withdrawal-card.successful {
+    background: linear-gradient(135deg, #16a34a, #15803d);
+}
+
+@media (max-width: 700px) {
+    .withdrawal-grid {
+        grid-template-columns: 1fr;
+    }
+}
+
+/* Copy buttons for count / amount summaries */
+.summary-value {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+}
+
+.copy-btn {
+    border: 0;
+    background: transparent;
+    cursor: pointer;
+    padding: 2px 4px;
+    font-size: 12px;
+    line-height: 1;
+    opacity: .65;
+    border-radius: 5px;
+}
+
+.copy-btn:hover {
+    opacity: 1;
+    background: rgba(127,127,127,.12);
 }
