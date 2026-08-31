@@ -131,12 +131,12 @@ function getColumn(row, possibleNames) {
 
 
 // =============================================
-// UTR
+// UTR / TRANSACTION REFERENCE
 // =============================================
 
 function getUTR(row) {
 
-    return String(
+    const explicit = String(
         getColumn(row, [
             "UTR",
             "UTR No",
@@ -149,41 +149,38 @@ function getUTR(row) {
             "Reference No"
         ]) || ""
     ).trim();
+
+    if (explicit) return explicit;
+
+    return extractTransactionReference(row);
 }
 
+// DPB UTR/reference is embedded in the remark, e.g.
+// DPB-1821045324-W444-31458593
+function extractTransactionReference(row) {
+
+    const text = `${getEntryType(row)} ${getRemark(row)}`;
+
+    const match = text.match(/\bDPB-[^-\s]+-[^-\s]+-[^-\s]+/i);
+
+    return match ? match[0].toUpperCase() : "";
+}
 
 // =============================================
-// REVD DETECTION
+// REVD / REV DETECTION
 // =============================================
 
 function isREVD(row) {
 
-    const type = getEntryType(row).toUpperCase();
-    const remark = getRemark(row).toUpperCase();
-
-    const text = `${type} ${remark}`;
+    const text = `${getEntryType(row)} ${getRemark(row)}`.toUpperCase();
 
     return (
         /\bREVD\b/.test(text) ||
+        /\bREV\b/.test(text) && text.includes("DPB-") ||
         text.includes("REVERSE DEBIT") ||
         text.includes("REVERSED DEBIT")
     );
 }
-
-// =============================================
-// REVD AMOUNT
-// ONLY REVD ROW DEBIT
-// =============================================
-
-function getREVDAmount(row) {
-
-    if (!isREVD(row)) {
-        return 0;
-    }
-
-    return getDebit(row);
-}
-
 
 // =============================================
 // REMARK
@@ -588,7 +585,9 @@ function getBonusType(row) {
     if (
         text.includes("REFER - BONUS") ||
         text.includes("REFER BONUS") ||
-        text.includes("REFER-BONUS")
+        text.includes("REFER-BONUS") ||
+        text.includes("REFFRAL BONUS") ||
+        text.includes("REFERRAL BONUS")
     ) {
         return "REFER - BONUS";
     }
@@ -643,40 +642,19 @@ function isBonus(row) {
 
 function isReversal(row) {
 
-    const type =
-        getEntryType(row);
+    const type = getEntryType(row).toUpperCase();
+    const remark = getRemark(row).toUpperCase();
+    const text = `${type} ${remark}`;
 
-    const remark =
-        getRemark(row)
-            .toUpperCase();
-
-
-    const text =
-        `${type} ${remark}`;
-
-
-    // Reverse Bonus
-    if (
-        type.includes("REVB") ||
-        remark.includes("REVB") ||
-        text.includes("REVERSE BONUS")
-    ) {
-        return true;
-    }
-
-
-    // Normal reversal
-    if (
+    return (
+        isREVD(row) ||
+        /\bREVB\b/.test(text) ||
+        /\bREV\b/.test(text) ||
+        text.includes("REVERSE BONUS") ||
         text.includes("REVERSAL") ||
         text.includes("REVERSED")
-    ) {
-        return true;
-    }
-
-
-    return false;
+    );
 }
-
 
 // =============================================
 // ₹1 DETECTION
@@ -721,102 +699,144 @@ function getCategory(row) {
 function classifyRows(rows) {
 
     const result = {
-
         normal: [],
         bonus: [],
         reversal: [],
         oneRupee: [],
         revd: []
-
     };
 
+    // ---------------------------------------------------------
+    // REVERSED / DUPLICATE UTR HANDLING
+    // ---------------------------------------------------------
+    // Some statement files contain a REVD row. Some files contain
+    // the reversal credit but the REVD text is missing. In both cases
+    // the business rule is the same:
+    //
+    //   1st debit for that UTR  -> EXCLUDE from main totals
+    //   reversal/credit row    -> EXCLUDE from main totals
+    //   later debit            -> VALID and COUNT + AMOUNT
+    //
+    // IMPORTANT: never remove every row sharing the UTR.
+    const excludedRows = new Set();
+    const rowIndex = new Map();
+    originalData.forEach((row, index) => rowIndex.set(row, index));
+
+    const utrGroups = new Map();
+    originalData.forEach(row => {
+        const utr = getUTR(row);
+        if (!utr) return;
+        if (!utrGroups.has(utr)) utrGroups.set(utr, []);
+        utrGroups.get(utr).push(row);
+    });
+
+    utrGroups.forEach(group => {
+        const debitRows = group.filter(row => getDebit(row) > 0);
+        const creditRows = group.filter(row => getCredit(row) > 0);
+        const reversalRows = group.filter(row => isREVD(row) || isReversal(row));
+
+        // A reversal can be explicitly labelled REVD/REV OR can appear
+        // only as a credit against the same UTR.
+        const hasExplicitReversal = reversalRows.some(row => isReversal(row));
+
+        if (hasExplicitReversal || (debitRows.length && creditRows.length)) {
+            // Always exclude only the FIRST debit for this UTR.
+            if (debitRows.length) {
+                excludedRows.add(debitRows[0]);
+            }
+
+            // Explicit reversal: put the reversal row(s) in reversal section.
+            // Missing-REVD case: the credit row is also excluded from main
+            // totals and shown in reversal section for visibility.
+            creditRows.forEach(row => excludedRows.add(row));
+        }
+    });
 
     rows.forEach(row => {
-
-        // =====================================
-        // REVD FIRST
-        // =====================================
-
-        if (isREVD(row)) {
-
-            result.revd.push(row);
-
-            return;
-        }
-
-
-        // =====================================
-        // NORMAL REVERSAL
-        // =====================================
-
-        if (isReversal(row)) {
-
-            result.reversal.push(row);
-
-            return;
-        }
-
-
-        // =====================================
-        // BONUS
-        // =====================================
-
+        // Bonus is completely separate from main totals.
         if (isBonus(row)) {
-
             result.bonus.push(row);
-
             return;
         }
 
-
-        // =====================================
-        // ₹1
-        // =====================================
-
+        // ₹1 is completely separate from main totals.
         if (isOneRupee(row)) {
-
             result.oneRupee.push(row);
-
             return;
         }
-
-
-        // =====================================
-        // NORMAL
-        // =====================================
-
-        result.normal.push(row);
-
-    });
-
-
-    // =========================================
-    // REMOVE ORIGINAL ENTRY OF REVD UTR
-    // =========================================
-
-    const revdUTRs = new Set(
-        result.revd
-            .map(row => getUTR(row))
-            .filter(Boolean)
-    );
-
-
-    result.normal = result.normal.filter(row => {
 
         const utr = getUTR(row);
+        const group = utr ? utrGroups.get(utr) || [] : [];
+        const hasCreditDebitPair = group.some(r => getCredit(r) > 0) && group.some(r => getDebit(r) > 0);
+        const explicitReversal = isReversal(row);
 
-        if (!utr) {
-            return true;
+        // Explicit REVD/REV rows always belong to Reversal.
+        if (explicitReversal) {
+            result.reversal.push(row);
+            if (isREVD(row)) result.revd.push(row);
+            return;
         }
 
-        return !revdUTRs.has(utr);
+        // Missing-REVD case: a credit row sharing a UTR with a debit is
+        // the reversal credit. Keep it out of main totals and show it in
+        // the Reversal section.
+        if (hasCreditDebitPair && getCredit(row) > 0) {
+            result.reversal.push(row);
+            return;
+        }
 
+        // First debit of a UTR that has a credit/reversal is excluded.
+        if (excludedRows.has(row)) {
+            return;
+        }
+
+        result.normal.push(row);
     });
-
 
     return result;
 }
 
+
+// =============================================
+// COPY SUMMARY VALUE
+// =============================================
+
+function copySummaryValue(id, mode) {
+    const el = document.getElementById(id);
+    if (!el) return;
+
+    let value = el.textContent.trim();
+
+    if (mode === "count") {
+        // Copy only the number, e.g. "1,234 entries" -> "1234".
+        const match = value.replace(/,/g, "").match(/-?\d+(?:\.\d+)?/);
+        value = match ? match[0] : "0";
+    } else {
+        // Copy only the numeric amount, without ₹/$/€ and without commas.
+        value = value
+            .replace(/[₹$€£]/g, "")
+            .replace(/,/g, "")
+            .trim();
+        const match = value.match(/-?\d+(?:\.\d+)?/);
+        value = match ? match[0] : "0";
+    }
+
+    navigator.clipboard.writeText(value).then(() => {
+        const buttons = document.querySelectorAll(`[data-copy-id="${id}"]`);
+        buttons.forEach(btn => {
+            const old = btn.textContent;
+            btn.textContent = "✓";
+            setTimeout(() => btn.textContent = old, 900);
+        });
+    }).catch(() => {
+        const input = document.createElement("textarea");
+        input.value = value;
+        document.body.appendChild(input);
+        input.select();
+        document.execCommand("copy");
+        input.remove();
+    });
+}
 
 
 // =============================================
@@ -1181,6 +1201,8 @@ function renderDashboard() {
 
     renderCategorySection();
 
+    renderWithdrawalSection();
+
     renderBonusSection();
 
     renderReversalTable();
@@ -1208,6 +1230,16 @@ function clearDashboard() {
         "mainCategoryCount",
         "0 entries"
     );
+
+    setText(
+        "withdrawalCount",
+        "0 entries"
+    );
+
+    setText("holdCount", "0");
+    setText("holdAmount", "₹0.00");
+    setText("successfulCount", "0");
+    setText("successfulAmount", "₹0.00");
 
     setText(
         "bonusCount",
@@ -1269,69 +1301,21 @@ function clearDashboard() {
 
 function updateKPIs() {
 
-    const classified =
-        classifyRows(filteredData);
+    const classified = classifyRows(filteredData);
+    const normal = classified.normal;
 
+    const totalCredit = normal.reduce((sum, row) => sum + getCredit(row), 0);
+    const totalDebit = normal.reduce((sum, row) => sum + getDebit(row), 0);
 
-    const normal =
-        classified.normal;
+    // Net movement is the absolute movement of valid/main transactions.
+    const netMovement = totalCredit + totalDebit;
 
-
-    const totalCredit =
-        normal.reduce(
-            (sum, row) =>
-                sum + getCredit(row),
-            0
-        );
-
-
-    const totalDebit =
-        normal.reduce(
-            (sum, row) =>
-                sum + getDebit(row),
-            0
-        );
-
-
-    const netMovement =
-        totalCredit + totalDebit;
-
-
-    setText(
-        "totalCredit",
-        money(totalCredit)
-    );
-
-
-    setText(
-        "totalDebit",
-        money(totalDebit)
-    );
-
-
-    setText(
-        "netMovement",
-        money(netMovement)
-    );
-
-
-    setText(
-        "transactionCount",
-        normal.length.toLocaleString()
-    );
-
-
-    setText(
-        "reversalCount",
-        classified.reversal.length.toLocaleString()
-    );
-
-
-    setText(
-        "oneRupeeCount",
-        classified.oneRupee.length.toLocaleString()
-    );
-
+    setText("totalCredit", money(totalCredit));
+    setText("totalDebit", money(totalDebit));
+    setText("netMovement", money(netMovement));
+    setText("transactionCount", normal.length.toLocaleString());
+    setText("reversalCount", classified.reversal.length.toLocaleString());
+    setText("oneRupeeCount", classified.oneRupee.length.toLocaleString());
 }
 
 
@@ -1487,6 +1471,39 @@ function categoryRowHTML(row) {
 
 
 // =============================================
+// WITHDRAWAL SECTION
+// =============================================
+
+function renderWithdrawalSection() {
+
+    // Withdrawal cards intentionally use the raw filtered rows.
+    // Hold and Successful are separate status buckets and do not enter
+    // ESD/DPB/UPD/DTD/GP totals.
+    const holdRows = filteredData.filter(row => getStatus(row) === "Hold");
+    const successfulRows = filteredData.filter(row => getStatus(row) === "Successful");
+
+    const holdAmount = holdRows.reduce(
+        (sum, row) => sum + getAmount(row),
+        0
+    );
+
+    const successfulAmount = successfulRows.reduce(
+        (sum, row) => sum + getAmount(row),
+        0
+    );
+
+    setText("holdCount", holdRows.length.toLocaleString());
+    setText("holdAmount", "₹" + money(holdAmount));
+    setText("successfulCount", successfulRows.length.toLocaleString());
+    setText("successfulAmount", "₹" + money(successfulAmount));
+    setText(
+        "withdrawalCount",
+        `${(holdRows.length + successfulRows.length).toLocaleString()} entries`
+    );
+}
+
+
+// =============================================
 // BONUS SECTION
 // =============================================
 
@@ -1551,24 +1568,6 @@ function renderBonusSection() {
         bonusTypes["WEEKLY CASHBACK BONUS"],
         "weeklyCashbackBonusCount",
         "weeklyCashbackBonusAmount"
-    );
-
-
-    // ---------------------------------------------
-    // SECOND HTML BONUS DESIGN IDs
-    // ---------------------------------------------
-
-    updateBonusBox(
-        bonusTypes["REFER - BONUS"],
-        "referBonusCount",
-        "referBonusAmount"
-    );
-
-
-    updateBonusBox(
-        bonusTypes["WELCOME BONUS"],
-        "welcomeBonusCount",
-        "welcomeBonusAmount"
     );
 
 
@@ -1710,6 +1709,16 @@ function renderReversalTable() {
         `${rows.length.toLocaleString()} entries`
     );
 
+    const totalReversalAmount = rows.reduce(
+        (sum, row) => sum + getAmount(row),
+        0
+    );
+
+    setText(
+        "reversalTotalAmount",
+        "₹" + money(totalReversalAmount)
+    );
+
 
     const table =
         document.getElementById("reversalTable");
@@ -1782,6 +1791,16 @@ function renderOneRupeeTable() {
     setText(
         "oneRupeeCountText",
         `${rows.length.toLocaleString()} entries`
+    );
+
+    const totalOneRupeeAmount = rows.reduce(
+        (sum, row) => sum + getAmount(row),
+        0
+    );
+
+    setText(
+        "oneRupeeTotalAmount",
+        "₹" + money(totalOneRupeeAmount)
     );
 
 
