@@ -172,9 +172,19 @@ function extractTransactionReference(row) {
 
     const text = `${getEntryType(row)} ${getRemark(row)}`.toUpperCase();
 
-    const match = text.match(/\bDPB-([A-Z0-9]+(?:-[A-Z0-9]+)*)/i);
+    // Normal DPB / REVD-DPB format.
+    // Keep the complete reference after DPB; it may contain numbers, letters
+    // and multiple hyphen-separated parts.
+    let match = text.match(/\bDPB-([A-Z0-9]+(?:-[A-Z0-9]+)*)/i);
+    if (match) return normalizeUTR(match[1]);
 
-    return match ? normalizeUTR(match[1]) : "";
+    // Some files have only REVD followed by the UTR/reference, without the
+    // literal "DPB" text, e.g. REVD-1788407468483-W008-1Q4OYPC.
+    // Do not require the UTR to be numeric.
+    match = text.match(/\bREVD[-:\s]+([A-Z0-9]+(?:-[A-Z0-9]+)*)/i);
+    if (match) return normalizeUTR(match[1]);
+
+    return "";
 }
 
 // =============================================
@@ -229,6 +239,40 @@ function getUser(row) {
             "Name"
         ]) || "Unknown"
     ).trim();
+}
+
+// FROMTO is important when deciding whether two entries are actually a
+// reversal pair. Example:
+//   nagwolf777/777Krishu  -> original DPB debit
+//   777Krishu/nagwolf777  -> reversal credit
+// A later debit such as nagwolf777/Rahuljeell22 must NOT be removed just
+// because it has the same UTR.
+function normalizeFromTo(value) {
+    return String(value || "")
+        .toUpperCase()
+        .trim()
+        .replace(/\s+/g, "");
+}
+
+function getFromTo(row) {
+    return normalizeFromTo(getColumn(row, [
+        "Fromto",
+        "From / To",
+        "From To",
+        "From/To"
+    ]) || "");
+}
+
+function isReverseFromTo(a, b) {
+    const first = getFromTo(a);
+    const second = getFromTo(b);
+    if (!first || !second) return false;
+
+    const aParts = first.split("/");
+    const bParts = second.split("/");
+    if (aParts.length !== 2 || bParts.length !== 2) return false;
+
+    return aParts[0] === bParts[1] && aParts[1] === bParts[0];
 }
 
 
@@ -755,25 +799,43 @@ function classifyRows(rows) {
         // Do not apply UTR-pair reversal rules to unrelated transaction types.
         if (!hasDPB && !explicitReversalCredit) return;
 
-        // A credit in a DPB UTR group is the reversal credit in the bank file,
-        // even when the word REVD is missing.
-        creditRows.forEach(item => {
-            reversalSet.add(item.row);
-            excluded.add(item.row);
+        // IMPORTANT: UTR alone is not enough. A same-UTR credit is treated as
+        // the reversal only when it is explicitly REVD/REV OR its Fromto is the
+        // exact reverse direction of a DPB debit. This prevents a later valid
+        // DPB debit with the same UTR but a different recipient from being removed.
+        creditRows.forEach(creditItem => {
+            const matchingDebits = debitRows.filter(debitItem =>
+                isReverseFromTo(debitItem.row, creditItem.row)
+            );
+
+            const isExplicit = isReversal(creditItem.row);
+            const isMatchedByFromTo = matchingDebits.length > 0;
+
+            if (!isExplicit && !isMatchedByFromTo) return;
+
+            reversalSet.add(creditItem.row);
+            excluded.add(creditItem.row);
+
+            // Only the debit that actually forms the reverse Fromto pair is
+            // cancelled. If the credit comes after that debit, cancel the
+            // original debit. If the credit comes first, keep the later debit
+            // because that is the valid transaction (2-row REVD case).
+            if (matchingDebits.length) {
+                const pairDebit = matchingDebits
+                    .slice()
+                    .sort((a, b) => a.index - b.index)[0];
+
+                if (pairDebit.index < creditItem.index) {
+                    excluded.add(pairDebit.row);
+                }
+            } else if (isExplicit) {
+                // Fallback for old files where Fromto is missing/invalid.
+                const firstDebit = debitRows[0];
+                if (firstDebit && firstDebit.index < creditItem.index) {
+                    excluded.add(firstDebit.row);
+                }
+            }
         });
-
-        const firstDebit = debitRows[0];
-        const firstCredit = creditRows[0];
-
-        // Case A: DEBIT -> REVD/CREDIT -> later DEBIT
-        // Remove the original first debit and the reversal credit.
-        // Keep the later debit(s).
-        // Case B: REVD/CREDIT -> DEBIT (only two rows)
-        // The credit is the reversal, but the debit is the valid entry.
-        if (firstDebit.index < firstCredit.index) {
-            excluded.add(firstDebit.row);
-        }
-        // If credit came first, do NOT exclude the debit.
     });
 
     rows.forEach(row => {
