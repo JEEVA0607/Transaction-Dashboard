@@ -134,6 +134,14 @@ function getColumn(row, possibleNames) {
 // UTR / TRANSACTION REFERENCE
 // =============================================
 
+function normalizeUTR(value) {
+    return String(value || "")
+        .toUpperCase()
+        .trim()
+        .replace(/^DPB[-:\s]*/i, "")
+        .replace(/\s+/g, "");
+}
+
 function getUTR(row) {
 
     const explicit = String(
@@ -150,20 +158,23 @@ function getUTR(row) {
         ]) || ""
     ).trim();
 
-    if (explicit) return explicit;
+    if (explicit) return normalizeUTR(explicit);
 
     return extractTransactionReference(row);
 }
 
-// DPB UTR/reference is embedded in the remark, e.g.
-// DPB-1821045324-W444-31458593
+// DPB reference can contain numbers, letters or a mixture.
+// Examples:
+//   DPB-KJWTZPR8FCUKVJSTMNXFGE-W014
+//   DPB-1821045324-W444-31458593
+// Keep the complete reference after DPB; never assume it is numeric.
 function extractTransactionReference(row) {
 
-    const text = `${getEntryType(row)} ${getRemark(row)}`;
+    const text = `${getEntryType(row)} ${getRemark(row)}`.toUpperCase();
 
-    const match = text.match(/\bDPB-[^-\s]+-[^-\s]+-[^-\s]+/i);
+    const match = text.match(/\bDPB-([A-Z0-9]+(?:-[A-Z0-9]+)*)/i);
 
-    return match ? match[0].toUpperCase() : "";
+    return match ? normalizeUTR(match[1]) : "";
 }
 
 // =============================================
@@ -570,14 +581,14 @@ function getBonusType(row) {
         `${type} ${remark}`;
 
 
-    // REVERSE BONUS
+    // Reverse Bonus is a reversal, NOT a normal bonus.
+    // Leave it for classifyRows() -> reversal section.
     if (
         text.includes("REVB") ||
         text.includes("REVERSE BONUS") ||
-        text.includes("REVERSE-BONUS") ||
-        text.includes("REVERSE BONUS")
+        text.includes("REVERSE-BONUS")
     ) {
-        return "REVB - REVERSE BONUS";
+        return null;
     }
 
 
@@ -706,87 +717,89 @@ function classifyRows(rows) {
         revd: []
     };
 
-    // ---------------------------------------------------------
-    // REVERSED / DUPLICATE UTR HANDLING
-    // ---------------------------------------------------------
-    // Some statement files contain a REVD row. Some files contain
-    // the reversal credit but the REVD text is missing. In both cases
-    // the business rule is the same:
-    //
-    //   1st debit for that UTR  -> EXCLUDE from main totals
-    //   reversal/credit row    -> EXCLUDE from main totals
-    //   later debit            -> VALID and COUNT + AMOUNT
-    //
-    // IMPORTANT: never remove every row sharing the UTR.
-    const excludedRows = new Set();
-    const rowIndex = new Map();
-    originalData.forEach((row, index) => rowIndex.set(row, index));
-
+    // Work with the original statement order. This is important because
+    // reversal handling depends on which debit appeared first for a UTR.
+    const indexed = originalData.map((row, index) => ({ row, index }));
     const utrGroups = new Map();
-    originalData.forEach(row => {
-        const utr = getUTR(row);
+
+    indexed.forEach(item => {
+        const utr = getUTR(item.row);
         if (!utr) return;
         if (!utrGroups.has(utr)) utrGroups.set(utr, []);
-        utrGroups.get(utr).push(row);
+        utrGroups.get(utr).push(item);
     });
 
+    // Rows which must never enter the main/category totals.
+    const excluded = new Set();
+    const reversalSet = new Set();
+
     utrGroups.forEach(group => {
-        const debitRows = group.filter(row => getDebit(row) > 0);
-        const creditRows = group.filter(row => getCredit(row) > 0);
-        const reversalRows = group.filter(row => isREVD(row) || isReversal(row));
+        const ordered = [...group].sort((a, b) => a.index - b.index);
+        const debitRows = ordered.filter(item => getDebit(item.row) > 0);
+        const creditRows = ordered.filter(item => getCredit(item.row) > 0);
 
-        // A reversal can be explicitly labelled REVD/REV OR can appear
-        // only as a credit against the same UTR.
-        const hasExplicitReversal = reversalRows.some(row => isReversal(row));
-
-        if (hasExplicitReversal || (debitRows.length && creditRows.length)) {
-            // Always exclude only the FIRST debit for this UTR.
-            if (debitRows.length) {
-                excludedRows.add(debitRows[0]);
-            }
-
-            // Explicit reversal: put the reversal row(s) in reversal section.
-            // Missing-REVD case: the credit row is also excluded from main
-            // totals and shown in reversal section for visibility.
-            creditRows.forEach(row => excludedRows.add(row));
+        if (!debitRows.length || !creditRows.length) {
+            // Explicit reversal can exist without a matching pair.
+            ordered.forEach(item => {
+                if (isReversal(item.row)) {
+                    reversalSet.add(item.row);
+                    excluded.add(item.row);
+                }
+            });
+            return;
         }
+
+        const hasDPB = ordered.some(item => /\bDPB\b/i.test(`${getEntryType(item.row)} ${getRemark(item.row)}`));
+        const explicitReversalCredit = creditRows.some(item => isReversal(item.row));
+
+        // Do not apply UTR-pair reversal rules to unrelated transaction types.
+        if (!hasDPB && !explicitReversalCredit) return;
+
+        // A credit in a DPB UTR group is the reversal credit in the bank file,
+        // even when the word REVD is missing.
+        creditRows.forEach(item => {
+            reversalSet.add(item.row);
+            excluded.add(item.row);
+        });
+
+        const firstDebit = debitRows[0];
+        const firstCredit = creditRows[0];
+
+        // Case A: DEBIT -> REVD/CREDIT -> later DEBIT
+        // Remove the original first debit and the reversal credit.
+        // Keep the later debit(s).
+        // Case B: REVD/CREDIT -> DEBIT (only two rows)
+        // The credit is the reversal, but the debit is the valid entry.
+        if (firstDebit.index < firstCredit.index) {
+            excluded.add(firstDebit.row);
+        }
+        // If credit came first, do NOT exclude the debit.
     });
 
     rows.forEach(row => {
-        // Bonus is completely separate from main totals.
+
+        // Bonus is completely separate from all transaction totals.
         if (isBonus(row)) {
             result.bonus.push(row);
             return;
         }
 
-        // ₹1 is completely separate from main totals.
+        // ₹1 entries are completely separate from all main totals.
         if (isOneRupee(row)) {
             result.oneRupee.push(row);
             return;
         }
 
-        const utr = getUTR(row);
-        const group = utr ? utrGroups.get(utr) || [] : [];
-        const hasCreditDebitPair = group.some(r => getCredit(r) > 0) && group.some(r => getDebit(r) > 0);
-        const explicitReversal = isReversal(row);
-
-        // Explicit REVD/REV rows always belong to Reversal.
-        if (explicitReversal) {
+        // Explicit reversal rows always go to the reversal section.
+        if (reversalSet.has(row) || isReversal(row)) {
             result.reversal.push(row);
             if (isREVD(row)) result.revd.push(row);
             return;
         }
 
-        // Missing-REVD case: a credit row sharing a UTR with a debit is
-        // the reversal credit. Keep it out of main totals and show it in
-        // the Reversal section.
-        if (hasCreditDebitPair && getCredit(row) > 0) {
-            result.reversal.push(row);
-            return;
-        }
-
-        // First debit of a UTR that has a credit/reversal is excluded.
-        if (excludedRows.has(row)) {
+        // Any row explicitly excluded by the UTR reversal rule is removed
+        // from the main/category totals.
+        if (excluded.has(row)) {
             return;
         }
 
@@ -807,35 +820,49 @@ function copySummaryValue(id, mode) {
 
     let value = el.textContent.trim();
 
+    // Copy only plain numbers: no commas, currency symbols or labels.
+    value = value
+        .replace(/[₹$€£,]/g, "")
+        .trim();
+
+    const match = value.match(/-?\d+(?:\.\d+)?/);
+    value = match ? match[0] : "0";
+
     if (mode === "count") {
-        // Copy only the number, e.g. "1,234 entries" -> "1234".
-        const match = value.replace(/,/g, "").match(/-?\d+(?:\.\d+)?/);
-        value = match ? match[0] : "0";
-    } else {
-        // Copy only the numeric amount, without ₹/$/€ and without commas.
-        value = value
-            .replace(/[₹$€£]/g, "")
-            .replace(/,/g, "")
-            .trim();
-        const match = value.match(/-?\d+(?:\.\d+)?/);
-        value = match ? match[0] : "0";
+        value = String(Math.trunc(Number(value) || 0));
     }
 
-    navigator.clipboard.writeText(value).then(() => {
-        const buttons = document.querySelectorAll(`[data-copy-id="${id}"]`);
-        buttons.forEach(btn => {
-            const old = btn.textContent;
-            btn.textContent = "✓";
-            setTimeout(() => btn.textContent = old, 900);
+    const showCopied = () => {
+        document.querySelectorAll(`[data-copy-id="${id}"]`).forEach(btn => {
+            const old = btn.innerHTML;
+            btn.innerHTML = "✓";
+            btn.classList.add("copied");
+            setTimeout(() => {
+                btn.innerHTML = old;
+                btn.classList.remove("copied");
+            }, 900);
         });
-    }).catch(() => {
+    };
+
+    const fallbackCopy = () => {
         const input = document.createElement("textarea");
         input.value = value;
+        input.style.position = "fixed";
+        input.style.opacity = "0";
         document.body.appendChild(input);
         input.select();
-        document.execCommand("copy");
+        try { document.execCommand("copy"); } catch (e) {}
         input.remove();
-    });
+        showCopied();
+    };
+
+    if (navigator.clipboard && window.isSecureContext) {
+        navigator.clipboard.writeText(value)
+            .then(showCopied)
+            .catch(fallbackCopy);
+    } else {
+        fallbackCopy();
+    }
 }
 
 
@@ -1304,10 +1331,22 @@ function updateKPIs() {
     const classified = classifyRows(filteredData);
     const normal = classified.normal;
 
-    const totalCredit = normal.reduce((sum, row) => sum + getCredit(row), 0);
-    const totalDebit = normal.reduce((sum, row) => sum + getDebit(row), 0);
+    // Total Credit must contain only valid ESD / DPB / GP / DTD / UPD
+    // category credits. Reversal credits, ₹1 and other rows are excluded.
+    const validCategoryRows = normal.filter(row =>
+        ["ESD", "DPB", "GP", "DTD", "UPD"].includes(getCategory(row))
+    );
 
-    // Net movement is the absolute movement of valid/main transactions.
+    const totalCredit = validCategoryRows.reduce(
+        (sum, row) => sum + getAmount(row),
+        0
+    );
+
+    const totalDebit = validCategoryRows.reduce(
+        (sum, row) => sum + getDebit(row),
+        0
+    );
+
     const netMovement = totalCredit + totalDebit;
 
     setText("totalCredit", money(totalCredit));
