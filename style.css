@@ -1134,3 +1134,24 @@ tbody tr:hover {
 .google-sheet-gid-control button:active {
     transform: scale(0.97);
 }
+
+.copy-btn {
+  background: #007bff;
+  color: #fff;
+  border: none;
+  padding: 6px 6px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 10px;
+  font-weight: 600;
+  transition: 0.2s ease;
+}
+
+.copy-btn:hover {
+  background: #0056b3;
+  transform: translateY(-1px);
+}
+
+.copy-btn:active {
+  transform: translateY(0);
+}
