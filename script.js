@@ -134,14 +134,6 @@ function getColumn(row, possibleNames) {
 // UTR / TRANSACTION REFERENCE
 // =============================================
 
-function normalizeUTR(value) {
-    return String(value || "")
-        .toUpperCase()
-        .trim()
-        .replace(/^DPB[-:\s]*/i, "")
-        .replace(/\s+/g, "");
-}
-
 function getUTR(row) {
 
     const explicit = String(
@@ -158,33 +150,20 @@ function getUTR(row) {
         ]) || ""
     ).trim();
 
-    if (explicit) return normalizeUTR(explicit);
+    if (explicit) return explicit;
 
     return extractTransactionReference(row);
 }
 
-// DPB reference can contain numbers, letters or a mixture.
-// Examples:
-//   DPB-KJWTZPR8FCUKVJSTMNXFGE-W014
-//   DPB-1821045324-W444-31458593
-// Keep the complete reference after DPB; never assume it is numeric.
+// DPB UTR/reference is embedded in the remark, e.g.
+// DPB-1821045324-W444-31458593
 function extractTransactionReference(row) {
 
-    const text = `${getEntryType(row)} ${getRemark(row)}`.toUpperCase();
+    const text = `${getEntryType(row)} ${getRemark(row)}`;
 
-    // Normal DPB / REVD-DPB format.
-    // Keep the complete reference after DPB; it may contain numbers, letters
-    // and multiple hyphen-separated parts.
-    let match = text.match(/\bDPB-([A-Z0-9]+(?:-[A-Z0-9]+)*)/i);
-    if (match) return normalizeUTR(match[1]);
+    const match = text.match(/\bDPB-[^-\s]+-[^-\s]+-[^-\s]+/i);
 
-    // Some files have only REVD followed by the UTR/reference, without the
-    // literal "DPB" text, e.g. REVD-1788407468483-W008-1Q4OYPC.
-    // Do not require the UTR to be numeric.
-    match = text.match(/\bREVD[-:\s]+([A-Z0-9]+(?:-[A-Z0-9]+)*)/i);
-    if (match) return normalizeUTR(match[1]);
-
-    return "";
+    return match ? match[0].toUpperCase() : "";
 }
 
 // =============================================
@@ -239,40 +218,6 @@ function getUser(row) {
             "Name"
         ]) || "Unknown"
     ).trim();
-}
-
-// FROMTO is important when deciding whether two entries are actually a
-// reversal pair. Example:
-//   nagwolf777/777Krishu  -> original DPB debit
-//   777Krishu/nagwolf777  -> reversal credit
-// A later debit such as nagwolf777/Rahuljeell22 must NOT be removed just
-// because it has the same UTR.
-function normalizeFromTo(value) {
-    return String(value || "")
-        .toUpperCase()
-        .trim()
-        .replace(/\s+/g, "");
-}
-
-function getFromTo(row) {
-    return normalizeFromTo(getColumn(row, [
-        "Fromto",
-        "From / To",
-        "From To",
-        "From/To"
-    ]) || "");
-}
-
-function isReverseFromTo(a, b) {
-    const first = getFromTo(a);
-    const second = getFromTo(b);
-    if (!first || !second) return false;
-
-    const aParts = first.split("/");
-    const bParts = second.split("/");
-    if (aParts.length !== 2 || bParts.length !== 2) return false;
-
-    return aParts[0] === bParts[1] && aParts[1] === bParts[0];
 }
 
 
@@ -625,14 +570,14 @@ function getBonusType(row) {
         `${type} ${remark}`;
 
 
-    // Reverse Bonus is a reversal, NOT a normal bonus.
-    // Leave it for classifyRows() -> reversal section.
+    // REVERSE BONUS
     if (
         text.includes("REVB") ||
         text.includes("REVERSE BONUS") ||
-        text.includes("REVERSE-BONUS")
+        text.includes("REVERSE-BONUS") ||
+        text.includes("REVERSE BONUS")
     ) {
-        return null;
+        return "REVB - REVERSE BONUS";
     }
 
 
@@ -761,107 +706,87 @@ function classifyRows(rows) {
         revd: []
     };
 
-    // Work with the original statement order. This is important because
-    // reversal handling depends on which debit appeared first for a UTR.
-    const indexed = originalData.map((row, index) => ({ row, index }));
-    const utrGroups = new Map();
+    // ---------------------------------------------------------
+    // REVERSED / DUPLICATE UTR HANDLING
+    // ---------------------------------------------------------
+    // Some statement files contain a REVD row. Some files contain
+    // the reversal credit but the REVD text is missing. In both cases
+    // the business rule is the same:
+    //
+    //   1st debit for that UTR  -> EXCLUDE from main totals
+    //   reversal/credit row    -> EXCLUDE from main totals
+    //   later debit            -> VALID and COUNT + AMOUNT
+    //
+    // IMPORTANT: never remove every row sharing the UTR.
+    const excludedRows = new Set();
+    const rowIndex = new Map();
+    originalData.forEach((row, index) => rowIndex.set(row, index));
 
-    indexed.forEach(item => {
-        const utr = getUTR(item.row);
+    const utrGroups = new Map();
+    originalData.forEach(row => {
+        const utr = getUTR(row);
         if (!utr) return;
         if (!utrGroups.has(utr)) utrGroups.set(utr, []);
-        utrGroups.get(utr).push(item);
+        utrGroups.get(utr).push(row);
     });
 
-    // Rows which must never enter the main/category totals.
-    const excluded = new Set();
-    const reversalSet = new Set();
-
     utrGroups.forEach(group => {
-        const ordered = [...group].sort((a, b) => a.index - b.index);
-        const debitRows = ordered.filter(item => getDebit(item.row) > 0);
-        const creditRows = ordered.filter(item => getCredit(item.row) > 0);
+        const debitRows = group.filter(row => getDebit(row) > 0);
+        const creditRows = group.filter(row => getCredit(row) > 0);
+        const reversalRows = group.filter(row => isREVD(row) || isReversal(row));
 
-        if (!debitRows.length || !creditRows.length) {
-            // Explicit reversal can exist without a matching pair.
-            ordered.forEach(item => {
-                if (isReversal(item.row)) {
-                    reversalSet.add(item.row);
-                    excluded.add(item.row);
-                }
-            });
-            return;
-        }
+        // A reversal can be explicitly labelled REVD/REV OR can appear
+        // only as a credit against the same UTR.
+        const hasExplicitReversal = reversalRows.some(row => isReversal(row));
 
-        const hasDPB = ordered.some(item => /\bDPB\b/i.test(`${getEntryType(item.row)} ${getRemark(item.row)}`));
-        const explicitReversalCredit = creditRows.some(item => isReversal(item.row));
-
-        // Do not apply UTR-pair reversal rules to unrelated transaction types.
-        if (!hasDPB && !explicitReversalCredit) return;
-
-        // IMPORTANT: UTR alone is not enough. A same-UTR credit is treated as
-        // the reversal only when it is explicitly REVD/REV OR its Fromto is the
-        // exact reverse direction of a DPB debit. This prevents a later valid
-        // DPB debit with the same UTR but a different recipient from being removed.
-        creditRows.forEach(creditItem => {
-            const matchingDebits = debitRows.filter(debitItem =>
-                isReverseFromTo(debitItem.row, creditItem.row)
-            );
-
-            const isExplicit = isReversal(creditItem.row);
-            const isMatchedByFromTo = matchingDebits.length > 0;
-
-            if (!isExplicit && !isMatchedByFromTo) return;
-
-            reversalSet.add(creditItem.row);
-            excluded.add(creditItem.row);
-
-            // Only the debit that actually forms the reverse Fromto pair is
-            // cancelled. If the credit comes after that debit, cancel the
-            // original debit. If the credit comes first, keep the later debit
-            // because that is the valid transaction (2-row REVD case).
-            if (matchingDebits.length) {
-                const pairDebit = matchingDebits
-                    .slice()
-                    .sort((a, b) => a.index - b.index)[0];
-
-                if (pairDebit.index < creditItem.index) {
-                    excluded.add(pairDebit.row);
-                }
-            } else if (isExplicit) {
-                // Fallback for old files where Fromto is missing/invalid.
-                const firstDebit = debitRows[0];
-                if (firstDebit && firstDebit.index < creditItem.index) {
-                    excluded.add(firstDebit.row);
-                }
+        if (hasExplicitReversal || (debitRows.length && creditRows.length)) {
+            // Always exclude only the FIRST debit for this UTR.
+            if (debitRows.length) {
+                excludedRows.add(debitRows[0]);
             }
-        });
+
+            // Explicit reversal: put the reversal row(s) in reversal section.
+            // Missing-REVD case: the credit row is also excluded from main
+            // totals and shown in reversal section for visibility.
+            creditRows.forEach(row => excludedRows.add(row));
+        }
     });
 
     rows.forEach(row => {
-
-        // Bonus is completely separate from all transaction totals.
+        // Bonus is completely separate from main totals.
         if (isBonus(row)) {
             result.bonus.push(row);
             return;
         }
 
-        // ₹1 entries are completely separate from all main totals.
+        // ₹1 is completely separate from main totals.
         if (isOneRupee(row)) {
             result.oneRupee.push(row);
             return;
         }
 
-        // Explicit reversal rows always go to the reversal section.
-        if (reversalSet.has(row) || isReversal(row)) {
+        const utr = getUTR(row);
+        const group = utr ? utrGroups.get(utr) || [] : [];
+        const hasCreditDebitPair = group.some(r => getCredit(r) > 0) && group.some(r => getDebit(r) > 0);
+        const explicitReversal = isReversal(row);
+
+        // Explicit REVD/REV rows always belong to Reversal.
+        if (explicitReversal) {
             result.reversal.push(row);
             if (isREVD(row)) result.revd.push(row);
             return;
         }
 
-        // Any row explicitly excluded by the UTR reversal rule is removed
-        // from the main/category totals.
-        if (excluded.has(row)) {
+        // Missing-REVD case: a credit row sharing a UTR with a debit is
+        // the reversal credit. Keep it out of main totals and show it in
+        // the Reversal section.
+        if (hasCreditDebitPair && getCredit(row) > 0) {
+            result.reversal.push(row);
+            return;
+        }
+
+        // First debit of a UTR that has a credit/reversal is excluded.
+        if (excludedRows.has(row)) {
             return;
         }
 
@@ -882,49 +807,35 @@ function copySummaryValue(id, mode) {
 
     let value = el.textContent.trim();
 
-    // Copy only plain numbers: no commas, currency symbols or labels.
-    value = value
-        .replace(/[₹$€£,]/g, "")
-        .trim();
-
-    const match = value.match(/-?\d+(?:\.\d+)?/);
-    value = match ? match[0] : "0";
-
     if (mode === "count") {
-        value = String(Math.trunc(Number(value) || 0));
+        // Copy only the number, e.g. "1,234 entries" -> "1234".
+        const match = value.replace(/,/g, "").match(/-?\d+(?:\.\d+)?/);
+        value = match ? match[0] : "0";
+    } else {
+        // Copy only the numeric amount, without ₹/$/€ and without commas.
+        value = value
+            .replace(/[₹$€£]/g, "")
+            .replace(/,/g, "")
+            .trim();
+        const match = value.match(/-?\d+(?:\.\d+)?/);
+        value = match ? match[0] : "0";
     }
 
-    const showCopied = () => {
-        document.querySelectorAll(`[data-copy-id="${id}"]`).forEach(btn => {
-            const old = btn.innerHTML;
-            btn.innerHTML = "✓";
-            btn.classList.add("copied");
-            setTimeout(() => {
-                btn.innerHTML = old;
-                btn.classList.remove("copied");
-            }, 900);
+    navigator.clipboard.writeText(value).then(() => {
+        const buttons = document.querySelectorAll(`[data-copy-id="${id}"]`);
+        buttons.forEach(btn => {
+            const old = btn.textContent;
+            btn.textContent = "✓";
+            setTimeout(() => btn.textContent = old, 900);
         });
-    };
-
-    const fallbackCopy = () => {
+    }).catch(() => {
         const input = document.createElement("textarea");
         input.value = value;
-        input.style.position = "fixed";
-        input.style.opacity = "0";
         document.body.appendChild(input);
         input.select();
-        try { document.execCommand("copy"); } catch (e) {}
+        document.execCommand("copy");
         input.remove();
-        showCopied();
-    };
-
-    if (navigator.clipboard && window.isSecureContext) {
-        navigator.clipboard.writeText(value)
-            .then(showCopied)
-            .catch(fallbackCopy);
-    } else {
-        fallbackCopy();
-    }
+    });
 }
 
 
@@ -1409,7 +1320,8 @@ function updateKPIs() {
         0
     );
 
-    const netMovement = totalCredit + totalDebit;
+    const netMovement =
+    totalCredit - googleTotalAmountValue;
 
     setText("totalCredit", money(totalCredit));
     setText("totalDebit", money(totalDebit));
@@ -1418,6 +1330,7 @@ function updateKPIs() {
     setText("reversalCount", classified.reversal.length.toLocaleString());
     setText("oneRupeeCount", classified.oneRupee.length.toLocaleString());
 }
+
 
 
 // =============================================
@@ -2830,4 +2743,892 @@ function downloadCSV() {
 
 
     URL.revokeObjectURL(url);
+}
+
+// =============================================
+// GOOGLE SHEET - READ ONLY LIVE SUMMARY
+// LAST SHEET / LAST TAB
+// =============================================
+
+const GOOGLE_SHEET_DEFAULT_ID =
+    "1Geld8Q9HfLs5KQ1I6drTYLkpGgEGb3m1xQ_1iKa5yaI";
+
+let googleSheetId =
+    localStorage.getItem("googleSheetId") ||
+    GOOGLE_SHEET_DEFAULT_ID;
+
+const GOOGLE_SHEET_DEFAULT_GID =
+    "652254393";
+
+let googleSheetGid =
+    localStorage.getItem("googleSheetGid") ||
+    GOOGLE_SHEET_DEFAULT_GID;
+
+const GOOGLE_SHEET_REFRESH_MS = 60000;
+
+let googleSheetRefreshTimer = null;
+
+// =============================================
+// GOOGLE SHEET TOTAL AMOUNT
+// =============================================
+
+let googleTotalAmountValue = 0;
+
+
+// =============================================
+// BASIC HELPERS
+// =============================================
+
+function googleIsBlank(value) {
+
+    return (
+        value === null ||
+        value === undefined ||
+        String(value).trim() === ""
+    );
+
+}
+
+
+function googleAmount(value) {
+
+    if (
+        value === null ||
+        value === undefined
+    ) {
+        return 0;
+    }
+
+    if (typeof value === "number") {
+
+        return Number.isFinite(value)
+            ? value
+            : 0;
+
+    }
+
+    let text =
+        String(value)
+            .trim();
+
+    if (!text) {
+        return 0;
+    }
+
+    /*
+        Handle formats like:
+
+        ₹1,250.50
+        1,250.50
+        Rs. 1250.50
+        INR 1250.50
+        (1,250.50)
+    */
+
+    const negative =
+        /^\(.*\)$/.test(text);
+
+    text =
+        text
+            .replace(/[₹$€£]/g, "")
+            .replace(/Rs\.?/gi, "")
+            .replace(/INR/gi, "")
+            .replace(/,/g, "")
+            .trim();
+
+    text =
+        text.replace(
+            /[^0-9.\-]/g,
+            ""
+        );
+
+    if (!text) {
+        return 0;
+    }
+
+    let amount =
+        Number(text);
+
+    if (!Number.isFinite(amount)) {
+        return 0;
+    }
+
+    if (negative) {
+        amount =
+            -Math.abs(amount);
+    }
+
+    return amount;
+}
+
+
+
+function setGoogleSheetStatus(text) {
+
+    setText(
+        "googleSheetStatus",
+        text
+    );
+
+}
+
+
+// =============================================
+// JSONP GVIZ REQUEST
+// =============================================
+
+function googleGVizRequest(
+    url,
+    timeoutMs = 15000
+) {
+
+    return new Promise(
+        (resolve, reject) => {
+
+            const callbackName =
+                "__googleGViz_" +
+                Date.now() +
+                "_" +
+                Math.random()
+                    .toString(36)
+                    .slice(2);
+
+
+            const script =
+                document.createElement("script");
+
+
+            let completed = false;
+
+
+            const timer =
+                setTimeout(
+                    () => finish(
+                        new Error(
+                            "Google Sheet request timed out."
+                        )
+                    ),
+                    timeoutMs
+                );
+
+
+            function cleanup() {
+
+                clearTimeout(timer);
+
+                try {
+                    delete window[callbackName];
+                } catch (_) {
+                    window[callbackName] = undefined;
+                }
+
+                script.remove();
+
+            }
+
+
+            function finish(
+                error,
+                data
+            ) {
+
+                if (completed) return;
+
+                completed = true;
+
+                cleanup();
+
+                if (error) {
+                    reject(error);
+                } else {
+                    resolve(data);
+                }
+
+            }
+
+
+            window[callbackName] =
+                function(data) {
+
+                    finish(
+                        null,
+                        data
+                    );
+
+                };
+
+
+            script.onerror =
+                function() {
+
+                    finish(
+                        new Error(
+                            "Google Sheet request failed."
+                        )
+                    );
+
+                };
+
+
+            script.src =
+                url +
+                (url.includes("?") ? "&" : "?") +
+                "tqx=" +
+                encodeURIComponent(
+                    `responseHandler:${callbackName}`
+                ) +
+                "&cachebust=" +
+                Date.now();
+
+
+            document.head.appendChild(script);
+
+        }
+    );
+
+}
+
+
+// =============================================
+// READ A GOOGLE SHEET TAB
+// =============================================
+
+// =============================================
+// READ GOOGLE SHEET TAB
+// B = UNIQUE USERS
+// E = AMOUNT
+// C = COMPLETELY IGNORED
+// =============================================
+
+async function readGoogleSheetTab(gid) {
+
+    /*
+        B = User
+        E = Amount
+
+        C and D are ignored.
+
+        CSV gives us the real row structure,
+        including blank E cells.
+    */
+
+    const url =
+    "https://docs.google.com/spreadsheets/d/" +
+    googleSheetId +
+    "/export" +
+    "?format=csv" +
+    "&gid=" +
+    encodeURIComponent(gid) +
+    "&cachebust=" +
+    Date.now();
+
+
+    const response =
+        await fetch(url);
+
+    if (!response.ok) {
+
+        throw new Error(
+            "Google Sheet CSV request failed: " +
+            response.status
+        );
+
+    }
+
+    const csvText =
+        await response.text();
+
+    if (!csvText.trim()) {
+
+        throw new Error(
+            "Google Sheet returned empty data."
+        );
+
+    }
+
+    /*
+        SheetJS is already available in your project
+        because you use XLSX for Excel files.
+
+        Parse CSV while preserving empty cells.
+    */
+
+    const workbook =
+        XLSX.read(
+            csvText,
+            {
+                type: "string",
+                raw: true,
+                cellDates: false
+            }
+        );
+
+    const sheet =
+        workbook.Sheets[
+            workbook.SheetNames[0]
+        ];
+
+    const data =
+        XLSX.utils.sheet_to_json(
+            sheet,
+            {
+                header: 1,
+                defval: "",
+                raw: true,
+                blankrows: true
+            }
+        );
+
+    /*
+        Convert:
+
+        A = index 0
+        B = index 1
+        E = index 4
+    */
+
+    return data.slice(1).map(row => {
+
+        return {
+
+            date:
+                row[0] ?? "",
+
+            user:
+                row[1] ?? "",
+
+            amount:
+                row[4] ?? ""
+
+        };
+
+    });
+
+}
+
+
+
+// =============================================
+// UPDATE SUMMARY
+// =============================================
+
+// =============================================
+// UPDATE GOOGLE SHEET SUMMARY
+// =============================================
+
+function updateGoogleSheetSummary(rows) {
+
+    let transactionCount = 0;
+    let totalAmount = 0;
+
+    const users = new Set();
+
+
+    for (let i = 0; i < rows.length; i++) {
+
+        const row = rows[i];
+
+        const amountValue =
+            row.amount;
+
+
+        /*
+            E column blank = STOP.
+
+            First blank E kittiyal
+            athinte thazhe onnum read cheyyilla.
+        */
+
+        if (googleIsBlank(amountValue)) {
+
+            console.log(
+                "Google Sheet stopped at row:",
+                i + 1,
+                "because E column is blank."
+            );
+
+            break;
+        }
+
+
+        const amount =
+            googleAmount(amountValue);
+
+
+        transactionCount++;
+
+        totalAmount += amount;
+
+
+        /*
+            B column = Unique Users
+        */
+
+        if (!googleIsBlank(row.user)) {
+
+            const user =
+                String(row.user)
+                    .trim()
+                    .toLowerCase();
+
+            if (user) {
+                users.add(user);
+            }
+
+        }
+
+    }
+
+
+    setText(
+        "googleUniqueUsers",
+        users.size.toLocaleString()
+    );
+
+
+    setText(
+        "googleTransactionCount",
+        transactionCount.toLocaleString()
+    );
+
+
+    setText(
+        "googleTotalAmount",
+        money(totalAmount)
+    );
+
+    googleTotalAmountValue = totalAmount;
+
+
+
+    setText(
+        "googleSheetRows",
+        transactionCount.toLocaleString()
+    );
+
+}
+
+
+
+
+// =============================================
+// REFRESH
+// =============================================
+
+async function refreshGoogleSheetSummary() {
+
+    const refreshButton =
+        document.getElementById(
+            "googleSheetRefresh"
+        );
+
+
+    if (refreshButton) {
+
+        refreshButton.disabled = true;
+
+        refreshButton.textContent =
+            "⏳ Reading...";
+
+    }
+
+
+    setGoogleSheetStatus(
+        "Reading • Read-only..."
+    );
+
+
+    try {
+
+        /*
+            IMPORTANT:
+
+            Use the last sheet GID here.
+
+            If your LAST TAB has GID 652254393,
+            this will read that tab.
+        */
+
+        const gid =
+    String(googleSheetGid || "").trim();
+
+if (!gid) {
+    throw new Error(
+        "Google Sheet GID is missing."
+    );
+}
+
+
+
+        setText(
+            "googleSheetName",
+            "Last Sheet"
+        );
+
+
+        setGoogleSheetStatus(
+            "Connected • Read-only • Last Sheet"
+        );
+
+
+        const rows =
+            await readGoogleSheetTab(
+                gid
+            );
+
+
+        updateGoogleSheetSummary(
+            rows
+        );
+
+
+        setGoogleSheetStatus(
+            "Connected • Read-only • Last Sheet • Updated"
+        );
+
+
+    } catch (error) {
+
+        console.error(
+            "Google Sheet read error:",
+            error
+        );
+
+
+        setGoogleSheetStatus(
+            "Unable to read • Check Publish to web"
+        );
+
+
+        setText(
+            "googleSheetName",
+            "Connection unavailable"
+        );
+
+
+        setText(
+            "googleSheetRows",
+            "0"
+        );
+
+
+        setText(
+            "googleUniqueUsers",
+            "0"
+        );
+
+
+        setText(
+            "googleTransactionCount",
+            "0"
+        );
+
+
+        setText(
+            "googleTotalAmount",
+            "₹0.00"
+        );
+
+
+    } finally {
+
+        if (refreshButton) {
+
+            refreshButton.disabled =
+                false;
+
+            refreshButton.textContent =
+                "🔄 Refresh Sheet";
+
+        }
+
+    }
+
+}
+
+// =============================================
+// GOOGLE SHEET LINK UPDATE
+// =============================================
+
+function initializeGoogleSheetLink() {
+
+    const linkInput =
+        document.getElementById("googleSheetLink");
+
+    const linkSubmit =
+        document.getElementById("googleSheetLinkSubmit");
+
+    if (!linkInput || !linkSubmit) {
+        return;
+    }
+
+
+    // -----------------------------------------
+    // LOAD SAVED LINK
+    // -----------------------------------------
+
+    if (googleSheetId) {
+
+        linkInput.value =
+            "https://docs.google.com/spreadsheets/d/" +
+            googleSheetId +
+            "/edit";
+
+    }
+
+
+    // -----------------------------------------
+    // UPDATE LINK
+    // -----------------------------------------
+
+    linkSubmit.addEventListener(
+        "click",
+        () => {
+
+            const link =
+                String(
+                    linkInput.value || ""
+                ).trim();
+
+
+            if (!link) {
+
+                alert(
+                    "Please enter Google Sheet link."
+                );
+
+                return;
+
+            }
+
+
+            // ---------------------------------
+            // EXTRACT SPREADSHEET ID
+            // ---------------------------------
+
+            const match =
+                link.match(
+                    /\/spreadsheets\/d\/([a-zA-Z0-9-_]+)/
+                );
+
+
+            if (!match) {
+
+                alert(
+                    "Invalid Google Sheet link."
+                );
+
+                return;
+
+            }
+
+
+            const newSheetId =
+                match[1];
+
+
+            // ---------------------------------
+            // UPDATE ID
+            // ---------------------------------
+
+            googleSheetId =
+                newSheetId;
+
+
+            // ---------------------------------
+            // SAVE ID
+            // ---------------------------------
+
+            localStorage.setItem(
+                "googleSheetId",
+                googleSheetId
+            );
+
+
+            // ---------------------------------
+            // REFRESH SHEET
+            // ---------------------------------
+
+            refreshGoogleSheetSummary();
+
+        }
+    );
+
+}
+
+
+// =============================================
+// INITIALIZE
+// =============================================
+
+function initializeGoogleSheetSummary() {
+
+    // Initialize Google Sheet Link
+    initializeGoogleSheetLink();
+
+
+    const refreshButton =
+        document.getElementById(
+            "googleSheetRefresh"
+        );
+
+
+    const gidInput =
+        document.getElementById(
+            "googleSheetGid"
+        );
+
+    const gidSubmit =
+        document.getElementById(
+            "googleSheetGidSubmit"
+        );
+
+
+    // -----------------------------------------
+    // REFRESH BUTTON
+    // -----------------------------------------
+
+    if (refreshButton) {
+
+        refreshButton.addEventListener(
+            "click",
+            refreshGoogleSheetSummary
+        );
+
+    }
+
+
+    // -----------------------------------------
+    // LOAD SAVED GID
+    // -----------------------------------------
+
+    const savedGid =
+        localStorage.getItem(
+            "googleSheetGid"
+        );
+
+    if (savedGid) {
+
+        googleSheetGid =
+            savedGid;
+
+    }
+
+
+    if (gidInput) {
+
+        gidInput.value =
+            googleSheetGid;
+
+    }
+
+
+    // -----------------------------------------
+    // GID SUBMIT
+    // -----------------------------------------
+
+    if (gidSubmit) {
+
+        gidSubmit.addEventListener(
+            "click",
+            () => {
+
+                const newGid =
+                    String(
+                        gidInput?.value || ""
+                    ).trim();
+
+
+                if (!newGid) {
+
+                    alert(
+                        "Please enter Google Sheet GID."
+                    );
+
+                    return;
+
+                }
+
+
+                // Numbers only
+                if (!/^\d+$/.test(newGid)) {
+
+                    alert(
+                        "GID must contain numbers only."
+                    );
+
+                    return;
+
+                }
+
+
+                // Update GID
+                googleSheetGid =
+                    newGid;
+
+
+                // Save for next time
+                localStorage.setItem(
+                    "googleSheetGid",
+                    googleSheetGid
+                );
+
+
+                // Read new sheet/tab
+                refreshGoogleSheetSummary();
+
+            }
+        );
+
+    }
+
+
+    // -----------------------------------------
+    // FIRST LOAD
+    // -----------------------------------------
+
+    refreshGoogleSheetSummary();
+
+
+    // -----------------------------------------
+    // AUTO REFRESH
+    // -----------------------------------------
+
+    if (
+        googleSheetRefreshTimer
+    ) {
+
+        clearInterval(
+            googleSheetRefreshTimer
+        );
+
+    }
+
+
+    googleSheetRefreshTimer =
+        setInterval(
+            refreshGoogleSheetSummary,
+            GOOGLE_SHEET_REFRESH_MS
+        );
+
+}
+
+
+// =============================================
+// START
+// =============================================
+
+if (
+    document.readyState === "loading"
+) {
+
+    document.addEventListener(
+        "DOMContentLoaded",
+        initializeGoogleSheetSummary
+    );
+
+} else {
+
+    initializeGoogleSheetSummary();
+
 }
