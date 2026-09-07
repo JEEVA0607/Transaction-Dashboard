@@ -83,6 +83,110 @@
     </section>
 
 
+    <!-- GOOGLE SHEET LIVE SUMMARY -->
+    <section class="google-sheet-section data-section">
+        <div class="section-header google-sheet-header">
+            <div>
+                <h2>📊 Google Sheet Live Summary</h2>
+                <span id="googleSheetStatus">Read-only • Last sheet • A:C</span>
+            </div>
+            <button id="googleSheetRefresh" class="download-btn" type="button">
+                🔄 Refresh Sheet
+            </button>
+        </div>
+        <div class="google-sheet-gid-control">
+
+    <div class="sheet-control">
+        <label for="googleSheetLink">Google Sheet Link</label>
+
+        <input
+            type="url"
+            id="googleSheetLink"
+            placeholder="Paste Google Sheet link">
+
+        <button
+            type="button"
+            id="googleSheetLinkSubmit">
+            Update Link
+        </button>
+    </div>
+        <div class="google-sheet-gid-control">
+            <label for="googleSheetGid">Sheet GID</label>
+
+                <input
+                    type="text"
+                    id="googleSheetGid"
+                    value="652254393"
+                    placeholder="Enter GID">
+
+        <button
+            type="button"
+            id="googleSheetGidSubmit">
+            Submit
+        </button>
+    </div>
+    
+    
+
+</div>
+
+
+        <div class="google-sheet-info">
+            <div>
+                <span>Connected Sheet</span>
+                <strong id="googleSheetName">Waiting...</strong>
+            </div>
+            <div>
+                <span>Continuous Entries</span>
+                <strong id="googleSheetRows">0</strong>
+            </div>
+        </div>
+
+        <div class="google-sheet-summary-grid">
+            <div class="google-summary-card users">
+                <span>Unique Users</span>
+                <strong id="googleUniqueUsers">0</strong>
+                <small>Column B</small>
+                <button
+                    type="button"
+                    class="copy-btn google-copy-btn"
+                    data-copy-id="googleUniqueUsers"
+                    onclick="copySummaryValue('googleUniqueUsers', 'count')"
+                    title="Copy unique user count"
+                >⧉</button>
+            </div>
+            <div class="google-summary-card transactions">
+                <span>Transactions</span>
+                <strong id="googleTransactionCount">0</strong>
+                <small>Column C entries</small>
+                <button
+                    type="button"
+                    class="copy-btn google-copy-btn"
+                    data-copy-id="googleTransactionCount"
+                    onclick="copySummaryValue('googleTransactionCount', 'count')"
+                    title="Copy transaction count"
+                >⧉</button>
+            </div>
+            <div class="google-summary-card amount">
+                <span>Total Amount</span>
+                <strong id="googleTotalAmount">₹0.00</strong>
+                <small>Column C</small>
+                <button
+                    type="button"
+                    class="copy-btn google-copy-btn"
+                    data-copy-id="googleTotalAmount"
+                    onclick="copySummaryValue('googleTotalAmount', 'amount')"
+                    title="Copy total amount"
+                >⧉</button>
+            </div>
+        </div>
+
+        <p class="google-sheet-note">
+            Only the continuous block from the first entry downward is counted. The first completely blank row in A:B:C stops the calculation; any data after that gap is ignored. The dashboard only reads the sheet and never edits or deletes it.
+        </p>
+    </section>
+
+
     <!-- KPI CARDS -->
     <section class="kpi-grid">
 
