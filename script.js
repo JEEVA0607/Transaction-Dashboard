@@ -161,7 +161,12 @@ function extractTransactionReference(row) {
 
     const text = `${getEntryType(row)} ${getRemark(row)}`;
 
-    const match = text.match(/\bDPB-[^-\s]+-[^-\s]+-[^-\s]+/i);
+    // Match the actual transaction reference for all main categories.
+    // This also handles reversal text such as:
+    // REVD-DPB-...  /  REVD-ESD-...
+    const match = text.match(
+        /\b(?:DPB|ESD|UPD|DTD|GP)-[A-Z0-9]+(?:-[A-Z0-9]+)*/i
+    );
 
     return match ? match[0].toUpperCase() : "";
 }
@@ -662,10 +667,16 @@ function isReversal(row) {
 
 function isOneRupee(row) {
 
-    const amount =
-        getAmount(row);
+    const credit = getCredit(row);
+    const debit = getDebit(row);
 
-    return Math.abs(amount - 1) < 0.000001;
+    // A ₹1 transaction is counted once whenever either side of the
+    // transaction is exactly ₹1. This avoids missing ₹1 rows when the
+    // statement contains a zero/empty opposite column.
+    return (
+        Math.abs(credit - 1) < 0.000001 ||
+        Math.abs(debit - 1) < 0.000001
+    );
 }
 
 
@@ -735,19 +746,51 @@ function classifyRows(rows) {
         const creditRows = group.filter(row => getCredit(row) > 0);
         const reversalRows = group.filter(row => isREVD(row) || isReversal(row));
 
-        // A reversal can be explicitly labelled REVD/REV OR can appear
-        // only as a credit against the same UTR.
-        const hasExplicitReversal = reversalRows.some(row => isReversal(row));
+        // Reversal handling is sequence-aware:
+        //   DPB-UTR
+        //   REVD-DPB-UTR (or another reversal row with the same UTR)
+        //   DPB-UTR
+        //
+        // The original debit and the reversal row are excluded.
+        // Only the later normal DPB/ESD/etc. entry remains valid.
+        //
+        // If there is only a REVD row followed by the valid entry, the
+        // valid entry is kept. Never exclude every row sharing the UTR.
+        const explicitReversalRows = reversalRows.filter(row => isReversal(row));
 
-        if (hasExplicitReversal || (debitRows.length && creditRows.length)) {
-            // Always exclude only the FIRST debit for this UTR.
-            if (debitRows.length) {
-                excludedRows.add(debitRows[0]);
+        if (explicitReversalRows.length) {
+            explicitReversalRows.forEach(row => excludedRows.add(row));
+
+            // Exclude a debit only when it occurred BEFORE the reversal.
+            // If the statement contains only REVD + the valid DPB/ESD entry,
+            // the normal entry must NOT be excluded.
+            const reversalIndex = Math.min(
+                ...explicitReversalRows.map(row => rowIndex.get(row))
+            );
+
+            const debitBeforeReversal = debitRows
+                .filter(row =>
+                    !isReversal(row) &&
+                    rowIndex.get(row) < reversalIndex
+                )
+                .sort((a, b) => rowIndex.get(a) - rowIndex.get(b))[0];
+
+            if (debitBeforeReversal) {
+                excludedRows.add(debitBeforeReversal);
             }
 
-            // Explicit reversal: put the reversal row(s) in reversal section.
-            // Missing-REVD case: the credit row is also excluded from main
-            // totals and shown in reversal section for visibility.
+            // Reversal rows themselves stay out of main totals.
+            creditRows.forEach(row => {
+                if (isReversal(row)) excludedRows.add(row);
+            });
+
+            return;
+        }
+
+        // No explicit REVD label: if the same UTR has both debit and credit,
+        // treat the credit as the reversal and only exclude the first debit.
+        if (debitRows.length && creditRows.length) {
+            excludedRows.add(debitRows[0]);
             creditRows.forEach(row => excludedRows.add(row));
         }
     });
@@ -2764,7 +2807,7 @@ let googleSheetGid =
     localStorage.getItem("googleSheetGid") ||
     GOOGLE_SHEET_DEFAULT_GID;
 
-const GOOGLE_SHEET_REFRESH_MS = 15000;
+const GOOGLE_SHEET_REFRESH_MS = 60000;
 
 let googleSheetRefreshTimer = null;
 
