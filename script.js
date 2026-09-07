@@ -2764,7 +2764,7 @@ let googleSheetGid =
     localStorage.getItem("googleSheetGid") ||
     GOOGLE_SHEET_DEFAULT_GID;
 
-const GOOGLE_SHEET_REFRESH_MS = 60000;
+const GOOGLE_SHEET_REFRESH_MS = 15000;
 
 let googleSheetRefreshTimer = null;
 
