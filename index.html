@@ -12,6 +12,9 @@
 
     <!-- Charts -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+    <!-- Image copy for NPL summary -->
+    <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
 </head>
 
 <body>
@@ -183,6 +186,117 @@
         <p class="google-sheet-note">
             Only the continuous block from the first entry downward is counted. The first completely blank row in A:B:C stops the calculation; any data after that gap is ignored. The dashboard only reads the sheet and never edits or deletes it.
         </p>
+    </section>
+
+
+    <!-- NPL DAILY SUMMARY -->
+    <section class="data-section npl-summary-section" id="nplSummarySection">
+
+        <div class="npl-summary-titlebar">
+            <div class="npl-summary-title" id="nplSummaryTitle">WOLF777 NPL – 8 SEP 2026</div>
+            <button
+                type="button"
+                id="copyNplSummary"
+                class="npl-copy-btn"
+                title="Copy this section as image"
+            >📋 Copy Image</button>
+        </div>
+
+        <div class="npl-summary-columns">
+
+            <!-- DEPOSIT -->
+            <div class="npl-summary-half deposit-half">
+                <div class="npl-summary-group-title">DEPOSIT</div>
+                <table class="npl-summary-table">
+                    <thead>
+                        <tr>
+                            <th>Source</th>
+                            <th>Amount</th>
+                            <th>Count</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>Bank</td>
+                            <td id="nplDpbAmount">NPR&nbsp;&nbsp; -</td>
+                            <td id="nplDpbCount">0</td>
+                        </tr>
+                        <tr>
+                            <td>E sewa Supago</td>
+                            <td id="nplEsdAmount">NPR&nbsp;&nbsp; -</td>
+                            <td id="nplEsdCount">0</td>
+                        </tr>
+                        <tr>
+                            <td>Crypto</td>
+                            <td id="nplDtdAmount">NPR&nbsp;&nbsp; -</td>
+                            <td id="nplDtdCount">0</td>
+                        </tr>
+                        <tr>
+                            <td>Goldpay</td>
+                            <td id="nplGpAmount">NPR&nbsp;&nbsp; -</td>
+                            <td id="nplGpCount">0</td>
+                        </tr>
+                        <tr>
+                            <td>Ultrapay</td>
+                            <td id="nplUpdAmount">NPR&nbsp;&nbsp; -</td>
+                            <td id="nplUpdCount">0</td>
+                        </tr>
+                        <tr class="npl-total-row">
+                            <td>TOTAL DEPOSIT</td>
+                            <td id="nplDepositTotalAmount">NPR&nbsp;&nbsp; -</td>
+                            <td id="nplDepositTotalCount">0</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- WITHDRAWAL -->
+            <div class="npl-summary-half withdrawal-half">
+                <div class="npl-summary-group-title">WITHDRAWAL</div>
+                <table class="npl-summary-table">
+                    <thead>
+                        <tr>
+                            <th>Source</th>
+                            <th>Amount</th>
+                            <th>Count</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>Bank</td>
+                            <td id="nplGoogleWithdrawalAmount">NPR&nbsp;&nbsp; -</td>
+                            <td id="nplGoogleWithdrawalCount">0</td>
+                        </tr>
+                        <tr>
+                            <td>E sewa</td>
+                            <td id="nplWithdrawalEswaAmount">NPR&nbsp;&nbsp; -</td>
+                            <td id="nplWithdrawalEswaCount">0</td>
+                        </tr>
+                        <tr>
+                            <td>Crypto</td>
+                            <td id="nplWithdrawalCryptoAmount">NPR&nbsp;&nbsp; -</td>
+                            <td id="nplWithdrawalCryptoCount">0</td>
+                        </tr>
+                        <tr>
+                            <td>-</td>
+                            <td id="nplWithdrawalDashAmount">NPR&nbsp;&nbsp; -</td>
+                            <td id="nplWithdrawalDashCount">0</td>
+                        </tr>
+                        <tr>
+                            <td>-</td>
+                            <td id="nplWithdrawalDash2Amount">NPR&nbsp;&nbsp; -</td>
+                            <td id="nplWithdrawalDash2Count">0</td>
+                        </tr>
+                        <tr class="npl-total-row">
+                            <td>TOTAL WITHDRAWAL</td>
+                            <td id="nplWithdrawalTotalAmount">NPR&nbsp;&nbsp; -</td>
+                            <td id="nplWithdrawalTotalCount">0</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+        </div>
     </section>
 
 
