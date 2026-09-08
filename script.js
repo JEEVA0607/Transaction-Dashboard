@@ -1228,6 +1228,8 @@ function renderDashboard() {
 
     updateKPIs();
 
+    renderNplSummary();
+
     renderStatusChart();
 
     renderTypeChart();
@@ -1268,6 +1270,8 @@ function clearDashboard() {
     setText("transactionCount", "0");
     setText("reversalCount", "0");
     setText("oneRupeeCount", "0");
+
+    renderNplSummary();
 
     setText(
         "mainCategoryCount",
@@ -1375,6 +1379,138 @@ function updateKPIs() {
 }
 
 
+
+// =============================================
+// NPL DAILY SUMMARY
+// =============================================
+
+function nplFormatAmount(value) {
+    const amount = Number(value) || 0;
+    if (amount <= 0) return "-";
+    return amount.toLocaleString("en-IN", {
+        minimumFractionDigits: 0,
+        maximumFractionDigits: 2
+    });
+}
+
+function setNplValue(id, value) {
+    const el = document.getElementById(id);
+    if (el) el.textContent = value;
+}
+
+function renderNplSummary() {
+    const date = new Date();
+    const day = date.getDate();
+    const month = date.toLocaleString("en-US", { month: "short" }).toUpperCase();
+    const year = date.getFullYear();
+
+    setNplValue("nplSummaryTitle", `WOLF777 NPL – ${day} ${month} ${year}`);
+
+    const classified = classifyRows(filteredData);
+    const normal = classified.normal;
+
+    const categoryRows = {
+        DPB: normal.filter(row => getCategory(row) === "DPB"),
+        ESD: normal.filter(row => getCategory(row) === "ESD"),
+        DTD: normal.filter(row => getCategory(row) === "DTD"),
+        GP: normal.filter(row => getCategory(row) === "GP"),
+        UPD: normal.filter(row => getCategory(row) === "UPD")
+    };
+
+    const stats = {};
+    Object.keys(categoryRows).forEach(category => {
+        const rows = categoryRows[category];
+        stats[category] = {
+            amount: rows.reduce((sum, row) => sum + getAmount(row), 0),
+            count: rows.length
+        };
+    });
+
+    setNplValue("nplDpbAmount", nplFormatAmount(stats.DPB.amount));
+    setNplValue("nplDpbCount", stats.DPB.count.toLocaleString());
+    setNplValue("nplEsdAmount", nplFormatAmount(stats.ESD.amount));
+    setNplValue("nplEsdCount", stats.ESD.count.toLocaleString());
+    setNplValue("nplDtdAmount", nplFormatAmount(stats.DTD.amount));
+    setNplValue("nplDtdCount", stats.DTD.count.toLocaleString());
+    setNplValue("nplGpAmount", nplFormatAmount(stats.GP.amount));
+    setNplValue("nplGpCount", stats.GP.count.toLocaleString());
+    setNplValue("nplUpdAmount", nplFormatAmount(stats.UPD.amount));
+    setNplValue("nplUpdCount", stats.UPD.count.toLocaleString());
+
+    const depositTotalAmount = Object.values(stats).reduce((sum, item) => sum + item.amount, 0);
+    const depositTotalCount = Object.values(stats).reduce((sum, item) => sum + item.count, 0);
+
+    setNplValue("nplDepositTotalAmount", nplFormatAmount(depositTotalAmount));
+    setNplValue("nplDepositTotalCount", depositTotalCount.toLocaleString());
+
+    // Withdrawal Bank is the live Google Sheet total/count.
+    const googleAmount = Number(googleTotalAmountValue) || 0;
+    const googleCountEl = document.getElementById("googleTransactionCount");
+    const googleCount = googleCountEl
+        ? (Number(String(googleCountEl.textContent).replace(/,/g, "")) || 0)
+        : 0;
+
+    setNplValue("nplGoogleWithdrawalAmount", nplFormatAmount(googleAmount));
+    setNplValue("nplGoogleWithdrawalCount", googleCount.toLocaleString());
+
+    // These rows are intentionally kept as shown in the requested format.
+    [
+        ["nplWithdrawalEswaAmount", "nplWithdrawalEswaCount"],
+        ["nplWithdrawalCryptoAmount", "nplWithdrawalCryptoCount"],
+        ["nplWithdrawalDashAmount", "nplWithdrawalDashCount"],
+        ["nplWithdrawalDash2Amount", "nplWithdrawalDash2Count"]
+    ].forEach(([amountId, countId]) => {
+        setNplValue(amountId, "-");
+        setNplValue(countId, "0");
+    });
+
+    setNplValue("nplWithdrawalTotalAmount", nplFormatAmount(googleAmount));
+    setNplValue("nplWithdrawalTotalCount", googleCount.toLocaleString());
+}
+
+async function copyNplSummaryAsImage() {
+    const section = document.getElementById("nplSummarySection");
+    const button = document.getElementById("copyNplSummary");
+    if (!section || typeof html2canvas === "undefined") return;
+
+    try {
+        if (button) {
+            button.disabled = true;
+            button.textContent = "⏳ Copying...";
+        }
+
+        const canvas = await html2canvas(section, {
+            backgroundColor: "#ffffff",
+            scale: 2,
+            useCORS: true,
+            ignoreElements: element => element.id === "copyNplSummary"
+        });
+
+        const blob = await new Promise(resolve => canvas.toBlob(resolve, "image/png"));
+        if (!blob) throw new Error("Image creation failed");
+
+        if (navigator.clipboard && window.ClipboardItem) {
+            await navigator.clipboard.write([
+                new ClipboardItem({ "image/png": blob })
+            ]);
+        } else {
+            throw new Error("Image clipboard is not supported in this browser.");
+        }
+
+        if (button) button.textContent = "✓ Copied Image";
+        setTimeout(() => {
+            if (button) button.textContent = "📋 Copy Image";
+        }, 1800);
+    } catch (error) {
+        console.error("NPL image copy failed:", error);
+        if (button) button.textContent = "❌ Copy Failed";
+        setTimeout(() => {
+            if (button) button.textContent = "📋 Copy Image";
+        }, 1800);
+    } finally {
+        if (button) button.disabled = false;
+    }
+}
 
 // =============================================
 // CATEGORY SECTION
@@ -3240,7 +3376,7 @@ function updateGoogleSheetSummary(rows) {
 
     googleTotalAmountValue = totalAmount;
 
-
+    renderNplSummary();
 
     setText(
         "googleSheetRows",
@@ -3379,6 +3515,9 @@ if (!gid) {
             "₹0.00"
         );
 
+        googleTotalAmountValue = 0;
+        renderNplSummary();
+
 
     } finally {
 
@@ -3504,6 +3643,16 @@ function initializeGoogleSheetLink() {
         }
     );
 
+}
+
+
+// =============================================
+// NPL SUMMARY COPY BUTTON
+// =============================================
+
+const copyNplSummaryButton = document.getElementById("copyNplSummary");
+if (copyNplSummaryButton) {
+    copyNplSummaryButton.addEventListener("click", copyNplSummaryAsImage);
 }
 
 
