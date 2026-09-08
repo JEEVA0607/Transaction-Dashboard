@@ -3323,8 +3323,17 @@ if (!gid) {
         );
 
 
+        const now = new Date();
+
+        const updateTime = now.toLocaleTimeString("en-GB", {
+            hour: "2-digit",
+            minute: "2-digit",
+            second: "2-digit",
+            hour12: false
+        });
+
         setGoogleSheetStatus(
-            "Connected • Read-only • Last Sheet • Updated"
+        `Connected • Read-only • Last Sheet • Updated ${updateTime}`
         );
 
 
