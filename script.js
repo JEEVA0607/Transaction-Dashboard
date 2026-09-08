@@ -3133,17 +3133,12 @@ async function readGoogleSheetTab(gid) {
     return data.slice(1).map(row => {
 
         return {
+    date: row[0] ?? "",
+    user: row[1] ?? "",
+    countValue: row[2] ?? "",
+    amount: row[4] ?? ""
+};
 
-            date:
-                row[0] ?? "",
-
-            user:
-                row[1] ?? "",
-
-            amount:
-                row[4] ?? ""
-
-        };
 
     });
 
@@ -3198,9 +3193,12 @@ function updateGoogleSheetSummary(rows) {
             googleAmount(amountValue);
 
 
+        if (!googleIsBlank(row.countValue)) {
         transactionCount++;
+        }
 
         totalAmount += amount;
+
 
 
         /*
