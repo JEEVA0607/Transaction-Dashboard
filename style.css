@@ -1288,13 +1288,13 @@ tbody tr:hover {
 .npl-summary-table td {
     background: #fff;
     color: #111;
-    font-size: 16px;
+    font-size: 20px;
     font-weight: 700;
     text-align: center;
 }
 
 .npl-summary-table td:first-child {
-    font-size: 17px;
+    font-size: 20px;
 }
 
 .npl-summary-table td:nth-child(2) {
@@ -1302,7 +1302,7 @@ tbody tr:hover {
 }
 
 .npl-summary-table td:nth-child(3) {
-    font-size: 18px;
+    font-size: 20px;
 }
 
 .npl-summary-table .npl-total-row td {
