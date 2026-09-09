@@ -13,7 +13,7 @@ html {
 }
 
 body {
-    font-family: Arial, Helvetica, sans-serif;
+    font-family: Calibri, Arial, Helvetica, sans-serif;
     background: #f3f6fb;
     color: #172033;
     line-height: 1.4;
@@ -1082,7 +1082,7 @@ tbody tr:hover {
 
 
 .google-sheet-gid-control {
-    font-family: Arial, sans-serif;
+    font-family: Calibri, Arial, sans-serif;
 }
 
 .sheet-control {
