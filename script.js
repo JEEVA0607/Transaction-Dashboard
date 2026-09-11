@@ -1453,10 +1453,21 @@ function renderNplSummary() {
     setNplValue("nplGoogleWithdrawalAmount", nplFormatAmount(googleAmount));
     setNplValue("nplGoogleWithdrawalCount", googleCount.toLocaleString());
 
-    // These rows are intentionally kept as shown in the requested format.
+    // Crypto USDT is read from Google Sheet column G and is shown
+    // separately here. It is already excluded from the Bank/Total
+    // Google withdrawal figures above.
+    setNplValue(
+        "nplWithdrawalCryptoAmount",
+        nplFormatAmount(googleCryptoUsdtAmountValue)
+    );
+    setNplValue(
+        "nplWithdrawalCryptoCount",
+        Number(googleCryptoUsdtCountValue || 0).toLocaleString()
+    );
+
+    // Other withdrawal rows remain unchanged.
     [
         ["nplWithdrawalEswaAmount", "nplWithdrawalEswaCount"],
-        ["nplWithdrawalCryptoAmount", "nplWithdrawalCryptoCount"],
         ["nplWithdrawalDashAmount", "nplWithdrawalDashCount"],
         ["nplWithdrawalDash2Amount", "nplWithdrawalDash2Count"]
     ].forEach(([amountId, countId]) => {
@@ -1464,8 +1475,40 @@ function renderNplSummary() {
         setNplValue(countId, "0");
     });
 
-    setNplValue("nplWithdrawalTotalAmount", nplFormatAmount(googleAmount));
-    setNplValue("nplWithdrawalTotalCount", googleCount.toLocaleString());
+    // TOTAL WITHDRAWAL = SUM OF ALL WITHDRAWAL ROWS IN THIS FIGURE.
+    // Crypto USDT is shown separately above, but it MUST also be included
+    // in the final total amount and total count.
+    const cryptoAmount = Number(googleCryptoUsdtAmountValue) || 0;
+    const cryptoCount = Number(googleCryptoUsdtCountValue) || 0;
+
+    // IMPORTANT: TOTAL WITHDRAWAL must be the sum of every withdrawal
+    // figure shown above, including the separate Crypto USDT figure.
+    // Bank = normal Google Sheet amount/count
+    // Crypto = Google Sheet G-column "CRYPTO USDT" amount/count
+    const withdrawalRows = [
+        { amount: googleAmount, count: googleCount },
+        { amount: cryptoAmount, count: cryptoCount }
+    ];
+
+    const withdrawalTotalAmount = withdrawalRows.reduce(
+        (sum, item) => sum + (Number(item.amount) || 0),
+        0
+    );
+
+    const withdrawalTotalCount = withdrawalRows.reduce(
+        (sum, item) => sum + (Number(item.count) || 0),
+        0
+    );
+
+    const totalWithdrawalAmountEl = document.getElementById("nplWithdrawalTotalAmount");
+    const totalWithdrawalCountEl = document.getElementById("nplWithdrawalTotalCount");
+
+    if (totalWithdrawalAmountEl) {
+        totalWithdrawalAmountEl.textContent = nplFormatAmount(withdrawalTotalAmount);
+    }
+    if (totalWithdrawalCountEl) {
+        totalWithdrawalCountEl.textContent = withdrawalTotalCount.toLocaleString();
+    }
 }
 
 async function copyNplSummaryAsImage() {
@@ -2952,6 +2995,8 @@ let googleSheetRefreshTimer = null;
 // =============================================
 
 let googleTotalAmountValue = 0;
+let googleCryptoUsdtAmountValue = 0;
+let googleCryptoUsdtCountValue = 0;
 
 
 // =============================================
@@ -3272,7 +3317,8 @@ async function readGoogleSheetTab(gid) {
     date: row[0] ?? "",
     user: row[1] ?? "",
     countValue: row[2] ?? "",
-    amount: row[4] ?? ""
+    amount: row[4] ?? "",
+    columnG: row[6] ?? ""
 };
 
 
@@ -3280,6 +3326,18 @@ async function readGoogleSheetTab(gid) {
 
 }
 
+
+
+// =============================================
+// GOOGLE SHEET CRYPTO USDT DETECTION
+// =============================================
+
+function isGoogleCryptoUsdt(row) {
+    return String(row?.columnG ?? "")
+        .trim()
+        .toLowerCase()
+        .includes("crypto usdt");
+}
 
 
 // =============================================
@@ -3294,6 +3352,9 @@ function updateGoogleSheetSummary(rows) {
 
     let transactionCount = 0;
     let totalAmount = 0;
+
+    googleCryptoUsdtAmountValue = 0;
+    googleCryptoUsdtCountValue = 0;
 
     const users = new Set();
 
@@ -3329,11 +3390,19 @@ function updateGoogleSheetSummary(rows) {
             googleAmount(amountValue);
 
 
-        if (!googleIsBlank(row.countValue)) {
-        transactionCount++;
-        }
+        // G column contains "CRYPTO USDT" → keep it OUT of the
+        // normal Google withdrawal total and show it separately
+        // in the Crypto row of the NPL figure.
+        if (isGoogleCryptoUsdt(row)) {
+            googleCryptoUsdtCountValue++;
+            googleCryptoUsdtAmountValue += amount;
+        } else {
+            if (!googleIsBlank(row.countValue)) {
+                transactionCount++;
+            }
 
-        totalAmount += amount;
+            totalAmount += amount;
+        }
 
 
 
@@ -3516,6 +3585,8 @@ if (!gid) {
         );
 
         googleTotalAmountValue = 0;
+        googleCryptoUsdtAmountValue = 0;
+        googleCryptoUsdtCountValue = 0;
         renderNplSummary();
 
 
