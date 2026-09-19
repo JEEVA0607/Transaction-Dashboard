@@ -18,6 +18,363 @@ if (excelFile) {
 }
 
 
+// =============================================
+// AUTO STATEMENT LOADER - CHROME
+// =============================================
+(function initializeAutoStatementLoader() {
+
+    const dateInput =
+        document.getElementById("statementDate");
+
+    const loadButton =
+        document.getElementById("autoLoadStatement");
+
+    const statusEl =
+        document.getElementById("autoLoadStatus");
+
+    const fileInput =
+        document.getElementById("excelFile");
+
+    if (!dateInput || !loadButton) {
+        console.error(
+            "Auto statement loader: required elements not found."
+        );
+        return;
+    }
+
+    const pad = n =>
+        String(n).padStart(2, "0");
+
+    const today = new Date();
+
+    dateInput.value =
+        `${today.getFullYear()}-${pad(today.getMonth() + 1)}-${pad(today.getDate())}`;
+
+
+    let loading = false;
+    let watchdog = null;
+
+
+    function setStatus(
+        text,
+        busy = false
+    ) {
+        loading = busy;
+
+        if (statusEl) {
+            statusEl.textContent = text;
+        }
+
+        loadButton.disabled = busy;
+
+        loadButton.textContent =
+            busy
+                ? "⏳ Loading..."
+                : "⬇️ Load";
+    }
+
+
+    window.addEventListener("message", event => {
+
+    if (event.source !== window) return;
+
+    const msg = event.data;
+
+    if (
+        !msg ||
+        msg.source !== "wolf77-auto-loader"
+    ) {
+        return;
+    }
+
+
+    /*
+     * STATUS
+     */
+    if (
+        msg.type === "WOLF_AUTO_STATUS"
+    ) {
+
+        setStatus(
+            msg.message || "Loading...",
+            true
+        );
+
+        return;
+    }
+
+
+    /*
+     * ERROR
+     */
+    if (
+        msg.type === "WOLF_AUTO_ERROR"
+    ) {
+
+        clearTimeout(watchdog);
+
+        setStatus(
+            msg.message ||
+            "Auto load failed",
+            false
+        );
+
+        console.error(
+            "Wolf77 auto loader:",
+            msg.message
+        );
+
+        return;
+    }
+
+
+    /*
+     * EXCEL FILE RECEIVED
+     */
+    if (
+        msg.type === "WOLF_FILE_READY"
+    ) {
+
+        try {
+
+            clearTimeout(watchdog);
+
+
+            if (!fileInput) {
+                throw new Error(
+                    "Excel upload input #excelFile not found."
+                );
+            }
+
+
+            /*
+             * Base64 received from extension
+             */
+            if (
+                typeof msg.base64 !== "string" ||
+                !msg.base64.length
+            ) {
+                throw new Error(
+                    "No Excel Base64 data received from extension."
+                );
+            }
+
+
+            /*
+             * Base64 -> Binary
+             */
+            const binary =
+                atob(msg.base64);
+
+
+            if (!binary.length) {
+                throw new Error(
+                    "Received Excel file is empty."
+                );
+            }
+
+
+            /*
+             * Binary -> Uint8Array
+             */
+            const bytes =
+                new Uint8Array(
+                    binary.length
+                );
+
+
+            for (
+                let i = 0;
+                i < binary.length;
+                i++
+            ) {
+                bytes[i] =
+                    binary.charCodeAt(i);
+            }
+
+
+            /*
+             * Blob
+             */
+            const blob =
+                new Blob(
+                    [bytes],
+                    {
+                        type:
+                            msg.mime ||
+                            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                    }
+                );
+
+
+            /*
+             * File
+             */
+            const file =
+                new File(
+                    [blob],
+                    msg.name ||
+                        "account-statement.xlsx",
+                    {
+                        type:
+                            blob.type,
+                        lastModified:
+                            Date.now()
+                    }
+                );
+
+
+            /*
+             * Put into Excel input
+             */
+            const dataTransfer =
+                new DataTransfer();
+
+            dataTransfer.items.add(file);
+
+            fileInput.files =
+                dataTransfer.files;
+
+
+            /*
+             * Trigger normal upload
+             */
+            fileInput.dispatchEvent(
+                new Event(
+                    "input",
+                    {
+                        bubbles: true
+                    }
+                )
+            );
+
+            fileInput.dispatchEvent(
+                new Event(
+                    "change",
+                    {
+                        bubbles: true
+                    }
+                )
+            );
+
+
+            /*
+             * Success
+             */
+            setStatus(
+                `Loaded ✓ ${file.name}`,
+                false
+            );
+
+
+            console.log(
+                "✅ Wolf77 Excel loaded:",
+                file.name,
+                file.size,
+                "bytes"
+            );
+
+
+        } catch (error) {
+
+            console.error(
+                "❌ Auto Excel injection failed:",
+                error
+            );
+
+            setStatus(
+                "Excel upload failed: " +
+                (
+                    error.message ||
+                    error
+                ),
+                false
+            );
+        }
+
+        return;
+    }
+
+});
+
+
+
+    /*
+     * Load button
+     */
+    loadButton.addEventListener(
+        "click",
+        () => {
+
+            const date =
+                dateInput.value;
+
+            if (!date) {
+
+                setStatus(
+                    "Please select a date",
+                    false
+                );
+
+                return;
+            }
+
+
+            clearTimeout(
+                watchdog
+            );
+
+
+            setStatus(
+                "Connecting to browser helper...",
+                true
+            );
+
+
+            /*
+             * Send request to
+             * panel-content.js
+             */
+            window.postMessage(
+                {
+                    source:
+                        "transaction-dashboard",
+
+                    type:
+                        "START_WOLF_AUTO_LOAD",
+
+                    date
+                },
+                "*"
+            );
+
+
+            /*
+             * Watchdog
+             */
+            watchdog =
+                setTimeout(
+                    () => {
+
+                        if (!loading) {
+                            return;
+                        }
+
+                        setStatus(
+                            "No helper response — check the browser extension and refresh both tabs.",
+                            false
+                        );
+
+                    },
+                    15000
+                );
+        }
+    );
+
+})();
+
+
+
 function handleFile(event) {
 
     const file = event.target.files[0];
