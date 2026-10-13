@@ -1365,3 +1365,97 @@ tbody tr:hover {
 .auto-load-btn{height:36px;border:0;border-radius:8px;padding:0 14px;background:#0f172a;color:#fff;font-weight:700;cursor:pointer;}
 .auto-load-btn:disabled{opacity:.65;cursor:wait;}
 .auto-load-status{font-size:12px;color:#64748b;max-width:420px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+
+/* FIX NPL WITHDRAWAL TABLE - ALL ROW LINES */
+
+.withdrawal-half .npl-summary-table {
+    width: 100%;
+    border-collapse: separate !important;
+    border-spacing: 0;
+    border: 0;
+}
+
+.withdrawal-half .npl-summary-table th,
+.withdrawal-half .npl-summary-table td {
+    border: 0 !important;
+    border-right: 1px solid #111827 !important;
+    border-bottom: 1px solid #111827 !important;
+}
+
+/* Restore horizontal line between every row */
+.withdrawal-half .npl-summary-table tbody tr td {
+    border-bottom: 1px solid #111827 !important;
+}
+
+/* Keep vertical column separators */
+.withdrawal-half .npl-summary-table th:last-child,
+.withdrawal-half .npl-summary-table td:last-child {
+    border-right: 0 !important;
+}
+
+/* Keep the bottom border of Total Withdrawal */
+.withdrawal-half .npl-summary-table tbody tr:last-child td {
+    border-bottom: 1px solid #111827 !important;
+}
+
+/* FFPAY SUMMARY CARD */
+.category-card.ffpay {
+    background: linear-gradient(135deg, #e0f2fe, #bae6fd);
+    color: #0c4a6e;
+    border: 1px solid #7dd3fc;
+    border-radius: 12px;
+    padding: 18px;
+    min-width: 0;
+    box-sizing: border-box;
+    box-shadow: 0 4px 12px rgba(2, 132, 199, 0.12);
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.category-card.ffpay:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 7px 18px rgba(2, 132, 199, 0.2);
+}
+
+.category-card.ffpay > span {
+    display: block;
+    font-size: 14px;
+    font-weight: 700;
+    letter-spacing: 1px;
+    margin-bottom: 14px;
+}
+
+.category-card.ffpay .summary-value {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    margin-top: 10px;
+}
+
+.category-card.ffpay .summary-value strong {
+    font-size: 24px;
+    font-weight: 800;
+    color: #075985;
+}
+
+.category-card.ffpay .summary-value small {
+    font-size: 17px;
+    font-weight: 700;
+    color: #0369a1;
+    overflow-wrap: anywhere;
+}
+
+/* Responsive layout */
+@media (max-width: 600px) {
+    .category-card.ffpay {
+        padding: 14px;
+    }
+
+    .category-card.ffpay .summary-value strong {
+        font-size: 20px;
+    }
+
+    .category-card.ffpay .summary-value small {
+        font-size: 15px;
+    }
+}
