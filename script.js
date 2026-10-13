@@ -376,50 +376,75 @@ if (excelFile) {
 
 
 function handleFile(event) {
-
-    const file = event.target.files[0];
+    const file = event.target.files?.[0];
 
     if (!file) return;
 
+    console.log("Excel upload started:", file.name, file.size);
+
+    if (typeof XLSX === "undefined") {
+        alert("Error: XLSX library load ആയിട്ടില്ല.");
+        console.error("XLSX is undefined. Check SheetJS script.");
+        return;
+    }
+
     const reader = new FileReader();
 
-    reader.onload = function (e) {
+    reader.onerror = function () {
+        console.error("FileReader error:", reader.error);
+        alert("Excel file വായിക്കാൻ കഴിഞ്ഞില്ല. File വീണ്ടും തിരഞ്ഞെടുക്കുക.");
+    };
 
+    reader.onload = function (e) {
         try {
+            if (!e.target.result) {
+                throw new Error("Excel file is empty.");
+            }
 
             const workbook = XLSX.read(
                 e.target.result,
-                { type: "array", cellDates: true }
+                {
+                    type: "array",
+                    cellDates: true
+                }
             );
 
             if (!workbook.SheetNames.length) {
-                alert("Excel file-il sheet kandethan pattiyilla.");
-                return;
+                throw new Error("Excel workbook contains no sheets.");
             }
 
             const sheet =
                 workbook.Sheets[workbook.SheetNames[0]];
 
-            const data =
-                XLSX.utils.sheet_to_json(
-                    sheet,
-                    { defval: "" }
+            const data = XLSX.utils.sheet_to_json(
+                sheet,
+                { defval: "" }
+            );
+
+            if (!data.length) {
+                throw new Error(
+                    "Selected Excel sheet contains no data rows."
                 );
+            }
 
             originalData = data.map(cleanRow);
-
             filteredData = [...originalData];
 
             initializeFilters();
-
             renderDashboard();
 
-        } catch (error) {
+            console.log(
+                "Excel upload successful:",
+                originalData.length,
+                "rows"
+            );
 
-            console.error(error);
+        } catch (error) {
+            console.error("Excel parsing/rendering error:", error);
 
             alert(
-                "Excel file read cheyyan pattiyilla."
+                "Excel Error: " +
+                (error?.message || String(error))
             );
         }
     };
@@ -906,6 +931,48 @@ function getType(row) {
 
 
     return "Other";
+}
+
+// =============================================
+// FFPAY DETECTION
+// =============================================
+
+function isFFPay(row) {
+
+    const text = (
+        getEntryType(row) + " " + getRemark(row)
+    ).toUpperCase();
+
+    return /\bFFPAY\s*-\s*/.test(text);
+}
+
+
+// =============================================
+// FFPAY SUMMARY
+// =============================================
+
+function renderFFPaySummary() {
+
+    const rows = filteredData.filter(row =>
+        isFFPay(row)
+    );
+
+    const count = rows.length;
+
+    const amount = rows.reduce(
+        (sum, row) => sum + getAmount(row),
+        0
+    );
+
+    setText(
+        "ffpayCount",
+        count.toLocaleString()
+    );
+
+    setText(
+        "ffpayAmount",
+        "₹" + money(amount)
+    );
 }
 
 
@@ -1587,6 +1654,8 @@ function renderDashboard() {
 
     renderNplSummary();
 
+    renderFFPaySummary();
+
     renderStatusChart();
 
     renderTypeChart();
@@ -1755,7 +1824,37 @@ function setNplValue(id, value) {
     if (el) el.textContent = value;
 }
 
+// =============================================
+// GOLD PAYOUT - GPW- SUCCESSFUL ONLY
+// =============================================
+
+function updateGoldPayoutSummary() {
+
+    const rows = originalData.filter(row => {
+
+        const remark = getRemark(row).toUpperCase();
+        const type = getEntryType(row).toUpperCase();
+
+        const text = `${type} ${remark}`;
+
+        return (
+            getStatus(row) === "Successful" &&
+            /\bGPW-/.test(text)
+        );
+    });
+
+    goldPayoutCountValue = rows.length;
+
+    goldPayoutAmountValue = rows.reduce(
+        (sum, row) => sum + getAmount(row),
+        0
+    );
+}
+
 function renderNplSummary() {
+
+    updateGoldPayoutSummary();
+
     const date = new Date();
     const day = date.getDate();
     const month = date.toLocaleString("en-US", { month: "short" }).toUpperCase();
@@ -1842,10 +1941,26 @@ function renderNplSummary() {
     // figure shown above, including the separate Crypto USDT figure.
     // Bank = normal Google Sheet amount/count
     // Crypto = Google Sheet G-column "CRYPTO USDT" amount/count
+
+        // GOLD PAYOUT - UPDATE THE CORRECT HTML IDs
+    setNplValue(
+        "nplWithdrawalGoldPayoutAmount",
+        nplFormatAmount(goldPayoutAmountValue)
+    );
+
+    setNplValue(
+        "nplWithdrawalGoldPayoutCount",
+        Number(goldPayoutCountValue || 0).toLocaleString()
+    );
+
     const withdrawalRows = [
-        { amount: googleAmount, count: googleCount },
-        { amount: cryptoAmount, count: cryptoCount }
-    ];
+    { amount: googleAmount, count: googleCount },
+    { amount: cryptoAmount, count: cryptoCount },
+    {
+        amount: goldPayoutAmountValue,
+        count: goldPayoutCountValue
+    }
+];
 
     const withdrawalTotalAmount = withdrawalRows.reduce(
         (sum, item) => sum + (Number(item.amount) || 0),
@@ -3354,6 +3469,10 @@ let googleSheetRefreshTimer = null;
 let googleTotalAmountValue = 0;
 let googleCryptoUsdtAmountValue = 0;
 let googleCryptoUsdtCountValue = 0;
+
+// GOLD PAYOUT - GPW-
+let goldPayoutAmountValue = 0;
+let goldPayoutCountValue = 0;
 
 
 // =============================================
